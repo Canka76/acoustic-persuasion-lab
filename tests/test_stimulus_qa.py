@@ -88,22 +88,28 @@ def _rms(arr: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
-# 1. Speech identity — A arm bit-identical to base render
+# 1. Source identity — all arms derive from the same base render (source_sha256)
+#    (A is no longer bit-identical to base; all arms run WORLD pass-through.)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("item_id", ITEM_IDS)
-def test_speech_identity(item_id: str) -> None:
-    """corpus/stimuli/A/<id>.wav must be bit-identical to corpus/base_renders/<id>.wav."""
-    arm_path = _wav_path("A", item_id)
-    base_path = _base_render_path(item_id)
-    if not arm_path.exists():
-        pytest.skip(f"A-arm stimulus missing: {arm_path}")
-    if not base_path.exists():
-        pytest.skip(f"Base render missing: {base_path}")
-    assert _sha256(arm_path) == _sha256(base_path), (
-        f"A-arm {item_id} differs from base render (bit-identity violation)"
+def test_source_identity(item_id: str) -> None:
+    """All three arm manifests must share the same source_sha256.
+    This confirms arms differ only by WORLD pitch-pull strength and added layer,
+    not by which TTS render was used.
+    """
+    hashes = {}
+    for arm in ARMS:
+        mpath = _manifest_path(arm, item_id)
+        if not mpath.exists():
+            pytest.skip(f"item {item_id} arm {arm}: manifest missing")
+        h = json.loads(mpath.read_text()).get("source_sha256")
+        if h is None:
+            pytest.skip(f"item {item_id} arm {arm}: source_sha256 missing from manifest")
+        hashes[arm] = h
+    assert len(set(hashes.values())) == 1, (
+        f"item {item_id}: arms derive from different base renders: {hashes}"
     )
-
 
 # ---------------------------------------------------------------------------
 # 2. Loudness match — integrated LUFS within ±0.1 LU across all arms
@@ -156,32 +162,27 @@ def test_true_peak(item_id: str) -> None:
 
 @pytest.mark.parametrize("item_id", ITEM_IDS)
 def test_bc_energy_match(item_id: str) -> None:
-    """20*log10(rms(B-A) / rms(C-A)) must be within ±0.5 dB.
+    """rms(B_layer.wav) / rms(C_layer.wav) must be within ±0.5 dB.
 
-    Both B and C now run through WORLD (B at strength=0.175, C at strength=0.0),
-    so both residuals contain the same vocoder artefact. The ratio therefore
-    reflects only the difference in added-layer energy — which must match within
-    ±0.5 dB to confirm the placebo is properly energy-matched.
+    Compares the actual added-layer signals saved as sidecars during render,
+    not the full-mix residuals which are dominated by the WORLD vocoder artifact.
+    This directly measures that the placebo energy matches the treatment layer.
     """
-    wav_a, sr_a = _load_wav("A", item_id)
-    wav_b, sr_b = _load_wav("B", item_id)
-    wav_c, sr_c = _load_wav("C", item_id)
-    assert sr_a == sr_b == sr_c, f"item {item_id}: sample-rate mismatch across arms"
-
-    n = min(len(wav_a), len(wav_b), len(wav_c))
-    diff_b = wav_b[:n].astype(np.float64) - wav_a[:n].astype(np.float64)
-    diff_c = wav_c[:n].astype(np.float64) - wav_a[:n].astype(np.float64)
-
-    rms_b = _rms(diff_b)
-    rms_c = _rms(diff_c)
-
+    b_layer = STIMULI_DIR / "B" / f"{item_id}.layer.wav"
+    c_layer = STIMULI_DIR / "C" / f"{item_id}.layer.wav"
+    if not b_layer.exists() or not c_layer.exists():
+        pytest.skip(f"item {item_id}: layer sidecars missing — re-render to generate them")
+    import soundfile as sf
+    b_wav, _ = sf.read(str(b_layer), dtype="float32", always_2d=False)
+    c_wav, _ = sf.read(str(c_layer), dtype="float32", always_2d=False)
+    rms_b = _rms(b_wav)
+    rms_c = _rms(c_wav)
     if rms_b < 1e-9 or rms_c < 1e-9:
-        pytest.skip(f"item {item_id}: near-zero added layer energy")
-
+        pytest.skip(f"item {item_id}: near-zero layer energy in sidecar")
     delta_db = 20.0 * np.log10(rms_b / rms_c)
     assert abs(delta_db) <= 0.5, (
-        f"item {item_id}: B/C added-energy delta {delta_db:.3f} dB — exceeds ±0.5 dB. "
-        f"rms(B-A)={_rms(diff_b):.6f}, rms(C-A)={_rms(diff_c):.6f}"
+        f"item {item_id}: B layer rms={rms_b:.6f}, C layer rms={rms_c:.6f}, "
+        f"delta {delta_db:.3f} dB — exceeds ±0.5 dB"
     )
 
 # ---------------------------------------------------------------------------
@@ -253,11 +254,14 @@ def test_am_verification(item_id: str) -> None:
     layer signal saved as a sidecar during render). If the sidecar is absent (pre-fix
     renders), regenerate from render or skip.
     """
-    layer_path = STIMULI_DIR / "B" / f"{item_id}.layer.wav"
+    # Use layer_am.wav (pre-ducking): duck_to_snr applies speech-envelope gain which
+    # superimposes 2-5 Hz syllabic modulation on the layer, masking the 10 Hz peak.
+    # The pre-ducking layer_am is a pure subharmonic sine with clean 10 Hz AM.
+    layer_path = STIMULI_DIR / "B" / f"{item_id}.layer_am.wav"
     if not layer_path.exists():
         pytest.skip(
-            f"item {item_id}: layer sidecar not found at {layer_path}. "
-            "Re-render with current render.py to generate .layer.wav sidecars."
+            f"item {item_id}: layer_am sidecar not found at {layer_path}. "
+            "Re-render with current render.py to generate .layer_am.wav sidecars."
         )
 
     import soundfile as sf

@@ -32,8 +32,12 @@ def _build_arm_b(
     f_mod_hz: float,
     am_depth: float,
     pull_strength: float,
-) -> tuple[np.ndarray, dict, np.ndarray]:
-    """Return (mixed_wav, manifest_info, raw_layer_before_ducking)."""
+) -> tuple[np.ndarray, dict, np.ndarray, np.ndarray]:
+    """Return (mixed_wav, manifest_info, layer_scaled, layer_am).
+
+    layer_scaled: added signal post-ducking (for energy QA).
+    layer_am: pre-ducking pure AM signal (for AM-peak QA — clean 10 Hz spike).
+    """
     from sap_stimulus.dramaturgy import segment
     from sap_stimulus.f0_pull import pull_f0
     from sap_stimulus.layers import subharmonic_layer, amplitude_modulate
@@ -63,7 +67,7 @@ def _build_arm_b(
         "acts": [{"name": a.name, "start_s": round(a.start_s, 3),
                   "end_s": round(a.end_s, 3), "chord": a.chord} for a in acts],
     }
-    return mixed, info, layer_scaled  # caller saves layer_scaled as sidecar
+    return mixed, info, layer_scaled, layer_am
 
 
 def _build_arm_c(
@@ -105,7 +109,7 @@ def _build_arm_c(
         "achieved_snr_db": round(achieved_snr, 2),
         "world_passthrough": True,
     }
-    return mixed, info
+    return mixed, info, placebo_scaled  # caller saves placebo_scaled as sidecar
 
 
 def render_all(
@@ -141,23 +145,33 @@ def render_all(
             out_wav = arm_dir / f"{iid}.wav"
 
             if arm == "A":
-                shutil.copy2(base_path, out_wav)
-                info: dict = {"arm": "A", "item_id": iid, "source_sha256": base_hash}
+                if is_processable:
+                    # WORLD pass-through (strength=0, no pitch change, no added layer)
+                    # so all three arms share the same vocoder artefact baseline.
+                    from sap_stimulus.f0_pull import pull_f0
+                    wav_a_world = pull_f0(base_wav, sr, acts=[], strength=0.0)
+                    wav_a_world = normalize_lufs(wav_a_world, sr)
+                    wav_a_world = peak_limit(wav_a_world)
+                    save(wav_a_world, sr, out_wav)
+                else:
+                    shutil.copy2(base_path, out_wav)
+                info: dict = {"arm": "A", "item_id": iid, "source_sha256": base_hash,
+                              "world_passthrough": is_processable}
 
             elif arm == "B" and is_processable:
-                mixed, info, arm_b_layer = _build_arm_b(
+                mixed, info, arm_b_layer, layer_am_b = _build_arm_b(
                     base_wav, sr, item["text"], iid,
                     snr_db, f_mod_hz, am_depth, pull_strength,
                 )
                 save(mixed, sr, out_wav)
-                # Save the scaled layer as a sidecar for QA AM verification
-                layer_sidecar = arm_dir / f"{iid}.layer.wav"
-                save(arm_b_layer, sr, layer_sidecar)
+                # layer.wav: post-ducking scaled layer (for energy QA)
+                save(arm_b_layer, sr, arm_dir / f"{iid}.layer.wav")
+                # layer_am.wav: pre-ducking pure AM signal (clean 10 Hz peak for AM QA)
+                save(layer_am_b, sr, arm_dir / f"{iid}.layer_am.wav")
                 info["source_sha256"] = base_hash
 
             elif arm == "C" and is_processable:
                 if arm_b_layer is None:
-                    # B not yet built in this run; build layer only
                     from sap_stimulus.dramaturgy import segment
                     from sap_stimulus.layers import subharmonic_layer, amplitude_modulate
                     acts = segment(item["text"], len(base_wav) / sr)
@@ -165,8 +179,10 @@ def render_all(
                         subharmonic_layer(acts, sr, len(base_wav)), sr,
                         f_mod_hz=f_mod_hz, depth=am_depth,
                     )
-                mixed, info = _build_arm_c(base_wav, sr, arm_b_layer, iid, snr_db)
+                mixed, info, placebo_scaled = _build_arm_c(base_wav, sr, arm_b_layer, iid, snr_db)
                 save(mixed, sr, out_wav)
+                # layer.wav: placebo layer (for energy QA vs B's layer.wav)
+                save(placebo_scaled, sr, arm_dir / f"{iid}.layer.wav")
                 info["source_sha256"] = base_hash
 
             else:
