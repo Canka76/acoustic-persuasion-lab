@@ -12,3 +12,19 @@ dev-dependencies = [
 name = "acoustic-persuasion-lab"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
+dependencies = [
+  "sap-core",
+  "sap-stimulus",
+  "acoustic-firewall",
+  "matplotlib",
+  "pandas",
+  "pingouin",
+  "statsmodels",
+  "fastapi>=0.165.0",
+  "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv.sources]
+sap-core = { workspace = true }
+sap-stimulus = { workspace = true }
+acoustic-firewall = { workspace = true }

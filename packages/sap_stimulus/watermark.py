@@ -1,91 +1,110 @@
-"""DSSS watermarking: 127-chip PN sequence, BPSK, carrier 7–9 kHz, −50 dBFS."""
+"""DSSS (Direct-Sequence Spread-Spectrum) watermark.
+
+Payload: b"SPAP-LAB" + 8-byte stimulus UUID (16 bytes = 128 bits).
+Carrier: centre of 7–9 kHz band. BPSK with 127-chip m-sequence. Level: −50 dBFS.
+"""
 from __future__ import annotations
 
-import struct
 import uuid
 
 import numpy as np
 
-PAYLOAD_HEADER = b"SPAP-LAB"
-_CARRIER_LOW_HZ = 7000.0
-_CARRIER_HIGH_HZ = 9000.0
-_LEVEL_DBFS = -50.0
-_CHIPS = 127  # PN sequence length (maximal-length 7-bit LFSR)
+PAYLOAD_PREFIX = b"SPAP-LAB"
+PN_LENGTH = 127          # degree-7 maximal-length sequence
+CARRIER_LOW_HZ = 7000.0
+CARRIER_HIGH_HZ = 9000.0
+LEVEL_DBFS = -50.0
 
 
-def _pn_sequence(n_chips: int = _CHIPS) -> np.ndarray:
-    """Generate a maximal-length binary PN sequence (±1) of length n_chips."""
-    # 7-bit LFSR with feedback polynomial x^7 + x^6 + 1
-    state = 0b1111111
-    seq = []
-    for _ in range(n_chips):
-        bit = ((state >> 6) ^ (state >> 5)) & 1
-        seq.append(1 if (state & 1) else -1)
-        state = ((state >> 1) | (bit << 6)) & 0x7F
+def _m_sequence(length: int = PN_LENGTH, seed: int = 0b111_1111) -> np.ndarray:
+    """Generate a ±1 m-sequence of given length using a degree-7 LFSR (taps 7,6)."""
+    reg = seed & 0x7F
+    seq: list[int] = []
+    for _ in range(length):
+        bit = ((reg >> 6) ^ (reg >> 5)) & 1
+        seq.append(1 if bit else -1)
+        reg = ((reg << 1) | bit) & 0x7F
     return np.array(seq, dtype=np.float32)
 
 
-def _build_payload(stimulus_uuid: uuid.UUID) -> bytes:
-    return PAYLOAD_HEADER + stimulus_uuid.bytes  # 8 + 16 = 24 bytes
+_PN = _m_sequence()
 
 
-def embed(
-    wav: np.ndarray,
-    sr: int,
-    stimulus_uuid: uuid.UUID | None = None,
-) -> tuple[np.ndarray, uuid.UUID]:
-    """Embed DSSS watermark into *wav*. Returns (watermarked_wav, stimulus_uuid)."""
-    if stimulus_uuid is None:
-        stimulus_uuid = uuid.uuid4()
+def _bytes_to_bpsk(payload: bytes) -> np.ndarray:
+    bits = []
+    for byte in payload:
+        for i in range(7, -1, -1):
+            bits.append(1 if (byte >> i) & 1 else -1)
+    return np.array(bits, dtype=np.float32)
 
-    payload = _build_payload(stimulus_uuid)
-    pn = _pn_sequence()
-    carrier_hz = (_CARRIER_LOW_HZ + _CARRIER_HIGH_HZ) / 2.0
-    level_linear = 10.0 ** (_LEVEL_DBFS / 20.0)
 
-    # Repeat payload bits as BPSK chips across the entire signal
-    payload_bits = np.unpackbits(np.frombuffer(payload, dtype=np.uint8))
-    bpsk = np.where(payload_bits, 1.0, -1.0).astype(np.float32)
+def embed(wav: np.ndarray, sr: int, stimulus_id: str | None = None) -> tuple[np.ndarray, str]:
+    """Embed watermark. Returns (watermarked_wav, stimulus_id)."""
+    if stimulus_id is None:
+        stimulus_id = str(uuid.uuid4())
 
-    n = len(wav)
-    chip_duration = max(1, n // (len(bpsk) * _CHIPS))
-    t = np.arange(n, dtype=np.float64) / sr
-    carrier = np.cos(2 * np.pi * carrier_hz * t).astype(np.float32)
+    uid_bytes = uuid.UUID(stimulus_id).bytes[:8]
+    payload = PAYLOAD_PREFIX + uid_bytes  # 16 bytes = 128 bits
+    bpsk = _bytes_to_bpsk(payload)        # 128 symbols
 
-    # Spread: tile (bpsk ⊗ pn) repeated to fill n samples
-    spread = np.tile(np.outer(bpsk, pn).ravel(), n).ravel()[:n].astype(np.float32)
-    wm_signal = spread * carrier * level_linear
+    # Spread: each symbol × full PN chip sequence
+    spread = np.repeat(bpsk, PN_LENGTH) * np.tile(_PN, len(bpsk))
 
-    return (wav + wm_signal).astype(np.float32), stimulus_uuid
+    # Modulate onto carrier
+    fc = (CARRIER_LOW_HZ + CARRIER_HIGH_HZ) / 2.0
+    t = np.arange(len(spread)) / sr
+    carrier = np.cos(2.0 * np.pi * fc * t).astype(np.float32)
+    wm = (spread * carrier).astype(np.float32)
+
+    # Tile to cover full wav duration
+    if len(wm) < len(wav):
+        reps = int(np.ceil(len(wav) / len(wm)))
+        wm = np.tile(wm, reps)
+    wm = wm[:len(wav)]
+
+    # Scale to target level
+    wm_rms = float(np.sqrt(np.mean(wm ** 2) + 1e-12))
+    target_rms = 10.0 ** (LEVEL_DBFS / 20.0)
+    wm *= target_rms / wm_rms
+
+    return (wav + wm).astype(np.float32), stimulus_id
 
 
 def decode(wav: np.ndarray, sr: int) -> bytes | None:
-    """Attempt to decode the DSSS watermark payload. Returns bytes or None."""
-    # Simplified correlator — despreads and demodulates
-    pn = _pn_sequence()
-    carrier_hz = (_CARRIER_LOW_HZ + _CARRIER_HIGH_HZ) / 2.0
-    n = len(wav)
-    t = np.arange(n, dtype=np.float64) / sr
-    carrier = np.cos(2 * np.pi * carrier_hz * t).astype(np.float32)
+    """Attempt to decode the DSSS watermark. Returns payload bytes or None.
 
-    demod = wav * carrier
-    payload_len_bytes = len(PAYLOAD_HEADER) + 16
-    n_bits = payload_len_bytes * 8
-    chip_block = _CHIPS
-    total_chips_needed = n_bits * chip_block
+    Coherently averages all complete repetitions of the watermark across the
+    file before correlating — necessary because the watermark sits at −50 dBFS
+    and a single-repetition SNR (−27 dB before DSSS gain) is too low for
+    reliable per-repetition decoding.
+    """
+    n_bits = 128
+    chips_per_bit = PN_LENGTH
+    rep_len = n_bits * chips_per_bit  # samples per one watermark cycle (16 256 @ 48 kHz)
 
-    if n < total_chips_needed:
+    if len(wav) < rep_len:
         return None
 
-    demod_trimmed = demod[:total_chips_needed]
-    bits = []
+    # Coherent average of all complete repetitions
+    n_reps = len(wav) // rep_len
+    stacked = np.zeros(rep_len, dtype=np.float64)
+    for i in range(n_reps):
+        stacked += wav[i * rep_len:(i + 1) * rep_len].astype(np.float64)
+    stacked /= n_reps  # averaging gives +10*log10(n_reps) dB SNR gain
+
+    fc = (CARRIER_LOW_HZ + CARRIER_HIGH_HZ) / 2.0
+    t = np.arange(rep_len) / sr
+    carrier = np.cos(2.0 * np.pi * fc * t)
+    demod = stacked * carrier
+
+    bits: list[int] = []
     for i in range(n_bits):
-        chunk = demod_trimmed[i * chip_block : (i + 1) * chip_block]
-        corr = float(np.dot(chunk[:len(pn)], pn))
+        chunk = demod[i * chips_per_bit:(i + 1) * chips_per_bit]
+        corr = float(np.dot(chunk, _PN.astype(np.float64)))
         bits.append(1 if corr > 0 else 0)
 
-    bit_array = np.array(bits, dtype=np.uint8)
-    payload = np.packbits(bit_array).tobytes()
-    if payload[:8] != PAYLOAD_HEADER:
-        return None
-    return payload
+    payload = bytes(
+        sum(bits[j * 8 + k] << (7 - k) for k in range(8))
+        for j in range(len(bits) // 8)
+    )
+    return payload if payload[:8] == PAYLOAD_PREFIX else None

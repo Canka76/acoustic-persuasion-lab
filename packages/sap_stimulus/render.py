@@ -1,167 +1,211 @@
-"""CLI entry point: python -m sap_stimulus.render --corpus ... --arms A B C --out ..."""
+"""CLI entry-point for stimulus generation.
+
+Usage:
+    python -m sap_stimulus.render \\
+        --corpus corpus/scripts/corpus_v1.json \\
+        --arms A B C \\
+        --out corpus/stimuli/
+
+Arm A: bit-identical copy of base render (control).
+Arm B: F0-pull + subharmonic drone + coherent AM + DSSS watermark.
+Arm C: placebo (matched energy/spectrum, jittered AM, no F0 pull) + DSSS watermark.
+"""
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import subprocess
-import uuid
+import shutil
 from pathlib import Path
 
 import numpy as np
 
-from sap_core.audio import load, save
-from sap_core.loudness import integrated_lufs, normalize_lufs, peak_limit
-from sap_stimulus.dramaturgy import segment
-from sap_stimulus.ducking import duck_to_snr
-from sap_stimulus.f0_pull import pull_f0
-from sap_stimulus.layers import amplitude_modulate, subharmonic_layer
-from sap_stimulus.placebo import make_placebo_layer
-from sap_stimulus.tts import PiperBackend
-from sap_stimulus.watermark import embed
-
-_TARGET_LUFS = -23.0
-_TARGET_PEAK_DBTP = -1.0
-_TARGET_SNR_DB = -31.0
-_AM_F_MOD = 10.0
-_AM_DEPTH = 0.03
-_SR = 48_000
+from sap_core.audio import load, save, sha256
+from sap_core.loudness import normalize_lufs, peak_limit
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _build_arm_b(
+    base_wav: np.ndarray,
+    sr: int,
+    text: str,
+    item_id: str,
+    snr_db: float,
+    f_mod_hz: float,
+    am_depth: float,
+    pull_strength: float,
+) -> tuple[np.ndarray, dict, np.ndarray]:
+    """Return (mixed_wav, manifest_info, raw_layer_before_ducking)."""
+    from sap_stimulus.dramaturgy import segment
+    from sap_stimulus.f0_pull import pull_f0
+    from sap_stimulus.layers import subharmonic_layer, amplitude_modulate
+    from sap_stimulus.ducking import duck_to_snr
+    from sap_stimulus.watermark import embed
 
+    acts = segment(text, len(base_wav) / sr, wav=base_wav, sr=sr)
+    wav_pitched = pull_f0(base_wav, sr, acts, strength=pull_strength)
+    layer = subharmonic_layer(acts, sr, len(wav_pitched))
+    layer_am = amplitude_modulate(layer, sr, f_mod_hz=f_mod_hz, depth=am_depth)
+    layer_scaled, achieved_snr = duck_to_snr(wav_pitched, layer_am, sr, target_snr_db=snr_db)
+    layer_scaled = layer_scaled[:len(wav_pitched)]
+    mixed = wav_pitched + layer_scaled
+    mixed = normalize_lufs(mixed, sr)
+    mixed = peak_limit(mixed)
+    mixed, stim_id = embed(mixed, sr)
+    # Save the scaled layer as a sidecar for QA verification
 
-def _git_commit() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], text=True
-        ).strip()
-    except Exception:
-        return "unknown"
-
-
-def render_base(item: dict, base_dir: Path) -> Path:
-    """Render base TTS audio for *item* if not already present."""
-    out = base_dir / f"{item['id']}.wav"
-    if out.exists():
-        return out
-    backend = PiperBackend()
-    info = backend.synthesize(item["text"], out)
-    # Trim silence, loudness-normalise, peak-limit
-    wav, sr = load(out, sr=_SR)
-    # Trim 200 ms silence at head/tail
-    from scipy.signal import find_peaks
-    rms_window = int(0.020 * sr)
-    energy = np.array([
-        np.sqrt(np.mean(wav[i:i+rms_window]**2))
-        for i in range(0, len(wav) - rms_window, rms_window)
-    ])
-    threshold = np.percentile(energy, 10) * 3
-    voiced = np.where(energy > threshold)[0]
-    if len(voiced):
-        head = max(0, voiced[0] * rms_window - int(0.2 * sr))
-        tail = min(len(wav), (voiced[-1] + 1) * rms_window + int(0.2 * sr))
-        wav = wav[head:tail]
-    wav = normalize_lufs(wav, sr, _TARGET_LUFS)
-    wav = peak_limit(wav, sr, _TARGET_PEAK_DBTP)
-    save(out, wav, sr)
-    sha = _sha256(out)
-    (out.with_suffix(".sha256")).write_text(sha)
-    return out
-
-
-def render_arm(
-    item: dict,
-    arm: str,
-    base_path: Path,
-    out_dir: Path,
-    operating_point_path: Path | None = None,
-) -> None:
-    target_snr = _TARGET_SNR_DB
-    if operating_point_path and operating_point_path.exists():
-        op = json.loads(operating_point_path.read_text())
-        target_snr = op.get("target_snr_db", _TARGET_SNR_DB)
-
-    wav, sr = load(base_path, sr=_SR)
-    n_samples = len(wav)
-
-    stim_uuid = uuid.uuid4()
-    manifest: dict = {
-        "id": item["id"],
-        "arm": arm,
-        "source_sha256": _sha256(base_path),
-        "git_commit": _git_commit(),
-        "generator_version": "0.1.0",
+    info = {
+        "arm": "B",
+        "item_id": item_id,
+        "stimulus_id": stim_id,
+        "achieved_snr_db": round(achieved_snr, 2),
+        "f_mod_hz": f_mod_hz,
+        "am_depth": am_depth,
+        "pull_strength": pull_strength,
+        "acts": [{"name": a.name, "start_s": round(a.start_s, 3),
+                  "end_s": round(a.end_s, 3), "chord": a.chord} for a in acts],
     }
+    return mixed, info, layer_scaled  # caller saves layer_scaled as sidecar
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{item['id']}.wav"
 
-    if arm == "A":
-        # Control: bit-identical copy of base render
-        import shutil
-        shutil.copy2(base_path, out_path)
-        manifest["f_mod_hz"] = None
-        manifest["depth"] = None
-        manifest["achieved_snr_db"] = None
-        manifest["chord_plan"] = None
-    else:
-        acts = segment(item["text"], len(wav) / sr, wav, sr)
-        sub_layer = subharmonic_layer(acts, sr, n_samples)
+def _build_arm_c(
+    base_wav: np.ndarray,
+    sr: int,
+    arm_b_layer: np.ndarray,
+    item_id: str,
+    snr_db: float,
+) -> tuple[np.ndarray, dict]:
+    """Arm C: WORLD pass-through (strength=0) + placebo layer.
 
-        if arm == "B":
-            wav_pulled = pull_f0(wav, sr, acts)
-            am_layer = amplitude_modulate(sub_layer, sr, _AM_F_MOD, _AM_DEPTH)
-            ducked, achieved_snr = duck_to_snr(wav_pulled, am_layer, sr, target_snr)
-            final = wav_pulled + ducked
-            manifest["f_mod_hz"] = _AM_F_MOD
-            manifest["depth"] = _AM_DEPTH
-            manifest["achieved_snr_db"] = achieved_snr
-            manifest["chord_plan"] = [{"name": a.name, "chord": a.chord, "start_s": a.start_s, "end_s": a.end_s} for a in acts]
-        elif arm == "C":
-            rng = np.random.default_rng(42)
-            placebo = make_placebo_layer(sub_layer, sr, _AM_DEPTH, rng)
-            ducked, achieved_snr = duck_to_snr(wav, placebo, sr, target_snr)
-            final = wav + ducked
-            manifest["f_mod_hz"] = "jittered_0.5-30"
-            manifest["depth"] = _AM_DEPTH
-            manifest["achieved_snr_db"] = achieved_snr
-            manifest["chord_plan"] = None
-        else:
-            raise ValueError(f"Unknown arm: {arm}")
+    The WORLD pass-through matches the vocoder residual of Arm B so that
+    rms(B-A) / rms(C-A) reflects only the difference in added-layer energy,
+    not the WORLD reconstruction artifact. Without this, C-A contains only
+    the placebo layer while B-A contains layer + large vocoder residual,
+    making the ±0.5 dB check meaningless.
+    """
+    from sap_stimulus.f0_pull import pull_f0
+    from sap_stimulus.placebo import make_placebo_layer
+    from sap_stimulus.ducking import duck_to_snr
+    from sap_stimulus.watermark import embed
 
-        final = normalize_lufs(final, sr, _TARGET_LUFS)
-        final = peak_limit(final, sr, _TARGET_PEAK_DBTP)
-        watermarked, stim_uuid = embed(final, sr, stim_uuid)
-        save(out_path, watermarked, sr)
+    # WORLD pass-through: analyze/synthesize with no pitch change (strength=0)
+    # This matches the vocoder residual of Arm B without any harmonic manipulation.
+    wav_world = pull_f0(base_wav, sr, acts=[], strength=0.0)
 
-    manifest["stimulus_uuid"] = str(stim_uuid)
-    (out_dir / f"{item['id']}.manifest.json").write_text(
-        json.dumps(manifest, indent=2)
-    )
+    placebo = make_placebo_layer(arm_b_layer, sr)
+    placebo_scaled, achieved_snr = duck_to_snr(wav_world, placebo, sr, target_snr_db=snr_db)
+    placebo_scaled = placebo_scaled[:len(wav_world)]
+    mixed = wav_world + placebo_scaled
+    mixed = normalize_lufs(mixed, sr)
+    mixed = peak_limit(mixed)
+    mixed, stim_id = embed(mixed, sr)
+
+    info = {
+        "arm": "C",
+        "item_id": item_id,
+        "stimulus_id": stim_id,
+        "achieved_snr_db": round(achieved_snr, 2),
+        "world_passthrough": True,
+    }
+    return mixed, info
+
+
+def render_all(
+    corpus_path: Path,
+    base_renders_dir: Path,
+    out_dir: Path,
+    arms: list[str],
+    snr_db: float = -31.0,
+    f_mod_hz: float = 10.0,
+    am_depth: float = 0.03,
+    pull_strength: float = 0.175,
+) -> None:
+    corpus = json.loads(corpus_path.read_text())
+    items = corpus["items"]
+
+    for item in items:
+        iid = item["id"]
+        base_path = base_renders_dir / f"{iid}.wav"
+        if not base_path.exists():
+            print(f"[WARN] base render missing: {base_path} — skipping")
+            continue
+
+        base_wav, sr = load(base_path, target_sr=48_000)
+        base_hash = sha256(base_path)
+        is_processable = item["block"] in ("fallacy", "practice")
+
+        # Pre-build B layer once so C can reuse it (avoid double WORLD analysis)
+        arm_b_layer: np.ndarray | None = None
+
+        for arm in arms:
+            arm_dir = out_dir / arm
+            arm_dir.mkdir(parents=True, exist_ok=True)
+            out_wav = arm_dir / f"{iid}.wav"
+
+            if arm == "A":
+                shutil.copy2(base_path, out_wav)
+                info: dict = {"arm": "A", "item_id": iid, "source_sha256": base_hash}
+
+            elif arm == "B" and is_processable:
+                mixed, info, arm_b_layer = _build_arm_b(
+                    base_wav, sr, item["text"], iid,
+                    snr_db, f_mod_hz, am_depth, pull_strength,
+                )
+                save(mixed, sr, out_wav)
+                # Save the scaled layer as a sidecar for QA AM verification
+                layer_sidecar = arm_dir / f"{iid}.layer.wav"
+                save(arm_b_layer, sr, layer_sidecar)
+                info["source_sha256"] = base_hash
+
+            elif arm == "C" and is_processable:
+                if arm_b_layer is None:
+                    # B not yet built in this run; build layer only
+                    from sap_stimulus.dramaturgy import segment
+                    from sap_stimulus.layers import subharmonic_layer, amplitude_modulate
+                    acts = segment(item["text"], len(base_wav) / sr)
+                    arm_b_layer = amplitude_modulate(
+                        subharmonic_layer(acts, sr, len(base_wav)), sr,
+                        f_mod_hz=f_mod_hz, depth=am_depth,
+                    )
+                mixed, info = _build_arm_c(base_wav, sr, arm_b_layer, iid, snr_db)
+                save(mixed, sr, out_wav)
+                info["source_sha256"] = base_hash
+
+            else:
+                # Trust items and unprocessable blocks: same as A
+                shutil.copy2(base_path, out_wav)
+                info = {"arm": arm, "item_id": iid, "source_sha256": base_hash,
+                        "note": "no_processing"}
+
+            manifest = arm_dir / f"{iid}.manifest.json"
+            manifest.write_text(json.dumps(info, indent=2))
+            snr_str = f"  SNR={info.get('achieved_snr_db', 'n/a')} dB" if arm != "A" else ""
+            print(f"  [{arm}] {iid}{snr_str}")
+
+    print(f"\nDone. Stimuli in {out_dir}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Render stimulus arms from corpus.")
-    parser.add_argument("--corpus", required=True, help="Path to corpus_v1.json")
-    parser.add_argument("--arms", nargs="+", default=["A", "B", "C"])
-    parser.add_argument("--out", required=True, help="Output directory root")
-    parser.add_argument("--base-renders", default="corpus/base_renders")
-    parser.add_argument("--operating-point", default=None)
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="Render SAP stimulus arms A/B/C")
+    ap.add_argument("--corpus", type=Path, required=True)
+    ap.add_argument("--arms", nargs="+", default=["A", "B", "C"])
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--base-renders", type=Path, default=Path("corpus/base_renders"))
+    ap.add_argument("--snr-db", type=float, default=-31.0,
+                    help="Target layer SNR relative to speech (dB). Override after threshold pilot.")
+    ap.add_argument("--f-mod-hz", type=float, default=10.0)
+    ap.add_argument("--am-depth", type=float, default=0.03)
+    ap.add_argument("--pull-strength", type=float, default=0.175)
+    args = ap.parse_args()
 
-    corpus = json.loads(Path(args.corpus).read_text())
-    base_dir = Path(args.base_renders)
-    out_root = Path(args.out)
-    op_path = Path(args.operating_point) if args.operating_point else None
-
-    items = corpus.get("items", [])
-    for item in items:
-        base_path = render_base(item, base_dir)
-        for arm in args.arms:
-            render_arm(item, arm, base_path, out_root / arm, op_path)
-            print(f"[render] {arm}/{item['id']} → done")
+    render_all(
+        corpus_path=args.corpus,
+        base_renders_dir=args.base_renders,
+        out_dir=args.out,
+        arms=args.arms,
+        snr_db=args.snr_db,
+        f_mod_hz=args.f_mod_hz,
+        am_depth=args.am_depth,
+        pull_strength=args.pull_strength,
+    )
 
 
 if __name__ == "__main__":

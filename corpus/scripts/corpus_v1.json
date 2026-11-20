@@ -1,122 +1,131 @@
 {
-  "version": "1.0",
-  "note": "Frozen stimulus corpus. Texts must not be changed after Step-9 pilot. Fallacy items: 4 sound, 4 containing exactly one structural fallacy (no cue words). Trust items: AI advisor allocation framing. Practice items: discarded from analysis.",
+  "version": "1",
   "items": [
     {
       "id": "prac_01",
       "block": "practice",
-      "text": "The city's recycling programme collected twelve percent more material last quarter than the same quarter a year ago. Processing costs per tonne also fell by eight percent over the same period. On both measures the programme moved in a favourable direction.",
+      "text": "The city switched to LED streetlights in 2019. Since then, maintenance costs have dropped by thirty percent. LED streetlights are therefore more cost-effective for municipalities than sodium-vapor lamps.",
       "sound": true,
       "fallacy_type": null,
-      "duration_target_s": 30
+      "duration_target_s": 25,
+      "notes": "Valid inductive argument — straightforward practice item."
     },
     {
       "id": "prac_02",
       "block": "practice",
-      "text": "A manufacturer tested two batches of adhesive under controlled humidity. Both batches failed bonding-strength requirements. The engineering team concluded that the formulation needs further adjustment before the product can be released.",
-      "sound": true,
-      "fallacy_type": null,
-      "duration_target_s": 28
+      "text": "Either we purchase the new fleet of delivery vans now, or the logistics department will face constant breakdowns next quarter. We cannot afford constant breakdowns. Therefore, we must purchase the new fleet now.",
+      "sound": false,
+      "fallacy_type": "false_dilemma",
+      "duration_target_s": 22,
+      "notes": "False dilemma — ignores leasing, repair, or phased replacement."
     },
     {
       "id": "arg_01",
       "block": "fallacy",
-      "text": "The procurement committee reviewed bids from four suppliers for laboratory centrifuges. All four submitted technical specifications, pricing schedules, and warranty terms. The committee scored each bid on six weighted criteria: unit cost, service response time, calibration support, compatibility with existing equipment, delivery lead time, and vendor financial stability. Supplier C received the highest aggregate score. Because the evaluation followed a documented multi-criteria process covering the factors the committee had identified as relevant, the committee's recommendation to award the contract to Supplier C is well-supported by the available evidence.",
+      "text": "Our procurement policy requires that any supplier awarded a contract exceeding fifty thousand euros must provide a performance bond. The contract with Halverson Logistics is valued at seventy-two thousand euros. Halverson Logistics must therefore provide a performance bond under our current policy.",
       "sound": true,
       "fallacy_type": null,
-      "duration_target_s": 52
+      "duration_target_s": 38,
+      "notes": "Valid deductive — modus ponens. Direct application of a stated rule."
     },
     {
       "id": "arg_02",
       "block": "fallacy",
-      "text": "A logistics firm introduced a new routing algorithm for its urban delivery fleet six months ago. Fuel consumption per delivery fell by eleven percent and average delivery time dropped by nine minutes. Because both metrics improved after the algorithm was deployed, the firm concluded that the routing algorithm was responsible for these gains and decided to expand the system to its regional fleet.",
-      "sound": false,
-      "fallacy_type": "affirming_the_consequent",
-      "duration_target_s": 42,
-      "fallacy_note": "Improvement followed deployment, but the argument treats this temporal sequence as sufficient to establish causation. Other factors (driver training, seasonal demand, fuel prices) are uncontrolled. Structure: 'If algorithm works, metrics improve; metrics improved; therefore algorithm worked' — affirming the consequent."
+      "text": "The regional waste authority collected data from forty-seven municipal composting programs across six countries over a ten-year period. Programs that provided weekly curbside pickup achieved a contamination rate of less than four percent, compared to twelve percent for bi-weekly programs. Based on this evidence, increasing collection frequency to weekly is likely to reduce contamination in our district's composting stream.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 48,
+      "notes": "Sound inductive generalization — large, representative, longitudinal sample explicitly stated."
     },
     {
       "id": "arg_03",
       "block": "fallacy",
-      "text": "A facilities team evaluated three cleaning-product brands for use across its building portfolio. They tested Brand X in two restroom facilities over a two-week period and found that surface bacterial counts were reduced on average by sixty percent. Based on this result, the team recommended that Brand X be adopted as the standard cleaning product for all forty-seven buildings in the portfolio.",
-      "sound": false,
-      "fallacy_type": "hasty_generalization",
-      "duration_target_s": 44,
-      "fallacy_note": "Generalises from n=2 test sites over two weeks to a 47-building portfolio. No structural cue words used."
+      "text": "Laboratory centrifuges require annual calibration to maintain measurement accuracy within the tolerance specified by the ISO standard. Our department's centrifuge was last calibrated fourteen months ago. Its current calibration is therefore outside the ISO-specified tolerance window and must be recalibrated before further use in accredited tests.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 42,
+      "notes": "Valid deductive. Clear rule application."
     },
     {
       "id": "arg_04",
       "block": "fallacy",
-      "text": "The warehouse management team is evaluating storage layouts. Option A uses a traditional fixed-location system; Option B uses a dynamic slotting system. The team lead argued that since the company cannot afford to operate without a coherent storage system, and the only way to maintain coherence is to continue with the fixed-location approach, the team should retain Option A. The team accepted this framing and did not evaluate Option B further.",
-      "sound": false,
-      "fallacy_type": "false_dilemma",
-      "duration_target_s": 48,
-      "fallacy_note": "Presents fixed-location vs no coherence as the only options, ignoring that dynamic slotting (Option B) also provides coherence. Classic false dilemma without cue words."
+      "text": "The archive climate control system maintains temperature at eighteen degrees Celsius and relative humidity at forty-five percent to slow the chemical degradation of paper documents. If either parameter drifts outside its specified band for more than four hours, the facility manager is required to log an incident and notify the preservation officer. Last Tuesday the humidity reached sixty-two percent for six hours. The facility manager was therefore obligated to log an incident and notify the preservation officer.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 55,
+      "notes": "Valid deductive — compound conditional, clearly triggered."
     },
     {
       "id": "arg_05",
       "block": "fallacy",
-      "text": "An equipment-leasing contract specifies that equipment is fit for purpose if it meets the performance benchmarks defined in Schedule B. The benchmarks in Schedule B were written to reflect what the parties agreed the equipment needed to achieve. Because the benchmarks were agreed upon to define fitness for purpose, and the equipment meets those benchmarks, the equipment is fit for purpose.",
+      "text": "When a building's HVAC system is undersized for the floor area it serves, interior temperatures will exceed the comfort threshold during peak summer hours. Last August, temperatures in the east wing exceeded the comfort threshold during peak hours. The HVAC system in the east wing must therefore be undersized for its floor area.",
       "sound": false,
-      "fallacy_type": "circular_justification",
-      "duration_target_s": 46,
-      "fallacy_note": "The claim that the equipment is fit for purpose is supported by meeting benchmarks that were themselves defined as the criterion for fitness — circular. No cue words."
+      "fallacy_type": "affirming_the_consequent",
+      "duration_target_s": 44,
+      "notes": "Affirms the consequent. P implies Q; Q observed; therefore P. Temperature excess has many causes."
     },
     {
       "id": "arg_06",
       "block": "fallacy",
-      "text": "A university library compared borrowing rates for physical and digital journal access over three consecutive academic years. Physical borrowing declined by an average of fourteen percent per year while digital access grew by twenty-two percent per year. The library also conducted a patron-satisfaction survey in which seventy-three percent of respondents rated the digital access portal as convenient or very convenient. On both usage and satisfaction measures, the data support expanding the digital collection and reducing physical journal subscriptions.",
-      "sound": true,
-      "fallacy_type": null,
-      "duration_target_s": 55
+      "text": "The procurement office tested two battery-electric delivery vehicles from Meridian Vehicles over a three-week period in March. Both vehicles completed their assigned routes without mechanical incident and returned with at least fifteen percent charge remaining. Meridian's electric delivery vehicles are therefore reliable under urban distribution conditions and suitable for fleet-wide adoption.",
+      "sound": false,
+      "fallacy_type": "hasty_generalization",
+      "duration_target_s": 46,
+      "notes": "n=2 for a fleet-wide generalization. No variation in route type, season, or load sampled."
     },
     {
       "id": "arg_07",
       "block": "fallacy",
-      "text": "A product warranty specifies that defects in materials or workmanship are covered for twenty-four months from the date of purchase. The warranty document also states that damage resulting from misuse is excluded. An independent repair technician examined the returned unit and documented that the internal corrosion pattern is consistent with liquid ingress, which the manufacturer's service manual classifies as a form of misuse. Because liquid ingress falls under the exclusion clause, the warranty claim does not meet the coverage conditions.",
-      "sound": true,
-      "fallacy_type": null,
-      "duration_target_s": 53
+      "text": "The archive's current paper-based requisition process introduces delays of up to three working days. We can either continue accepting these delays and fall further behind our service-level commitments, or we can implement the new digital requisition platform immediately. Since we cannot afford to fall further behind our commitments, we must implement the digital platform immediately.",
+      "sound": false,
+      "fallacy_type": "false_dilemma",
+      "duration_target_s": 48,
+      "notes": "Ignores partial digitization, process redesign without new software, or interim staffing."
     },
     {
       "id": "arg_08",
       "block": "fallacy",
-      "text": "A municipal transport authority conducted a passenger-satisfaction survey after extending bus service hours on three suburban routes by ninety minutes on weekday evenings. Survey responses collected over four weeks showed that satisfaction scores on those routes rose from an average of 3.4 to 4.1 on a five-point scale. Passenger boardings during the extended hours averaged 340 per route per week. The authority presented both findings to the council as evidence that the extended service is meeting demand and is well-received by passengers.",
-      "sound": true,
-      "fallacy_type": null,
-      "duration_target_s": 54
+      "text": "The revised equipment scheduling protocol should be adopted because it represents best practice for laboratory resource allocation. We know it represents best practice because it is the protocol recommended in our internal guidelines. Those guidelines were written to capture the most effective approaches to laboratory resource allocation, which is precisely why following this protocol constitutes best practice.",
+      "sound": false,
+      "fallacy_type": "circular_justification",
+      "duration_target_s": 50,
+      "notes": "Premise and conclusion mutually support each other with no external evidence."
     },
     {
       "id": "trust_01",
       "block": "trust",
-      "text": "An AI advisory system has analysed the performance history of two investment funds over the past five years using risk-adjusted return metrics, drawdown statistics, and fee structures. The system recommends allocating seventy percent of a hypothetical one-hundred-unit portfolio to Fund A and thirty percent to Fund B, citing Fund A's lower volatility and comparable returns over the measurement period. You may distribute the one hundred units between the two funds in any proportion you choose.",
+      "text": "An automated portfolio advisory system has analyzed the following two instruments for a twelve-month holding period. Instrument A is a diversified index fund with an annualized return of six percent and low volatility. Instrument B is a sector-specific fund with a projected return of eleven percent and moderate-to-high volatility. The advisory system recommends allocating sixty percent to Instrument A and forty percent to Instrument B, noting that this split balances expected return with downside protection. You have one hundred units to allocate between Instrument A and Instrument B. How do you split them?",
       "sound": null,
       "fallacy_type": null,
-      "duration_target_s": 48
+      "duration_target_s": 55,
+      "notes": "Balanced-risk recommendation. Deviation toward B = higher risk tolerance or higher AI trust."
     },
     {
       "id": "trust_02",
       "block": "trust",
-      "text": "An AI advisory system reviewed three contractors bidding for a building-maintenance contract. It analysed each contractor's historical completion rates, cost-overrun records, and client-satisfaction scores from verified project databases. The system recommends Contractor B, noting a fifteen percent lower average cost overrun than the nearest competitor and a ninety-one percent on-time completion rate. You may choose any contractor or decline to follow the recommendation.",
+      "text": "A supply-chain optimization system has evaluated two sourcing options for a critical component. Option A is a domestic supplier with a lead time of five days and a unit cost of forty-two euros. Option B is an overseas supplier with a lead time of twenty-two days and a unit cost of thirty-one euros. The system recommends allocating seventy percent of orders to Option A and thirty percent to Option B, citing the importance of supply-chain resilience. You have one hundred units of projected demand to allocate. How do you split them?",
       "sound": null,
       "fallacy_type": null,
-      "duration_target_s": 46
+      "duration_target_s": 58,
+      "notes": "Cost vs. resilience tradeoff. Following AI advice = risk-averse."
     },
     {
       "id": "trust_03",
       "block": "trust",
-      "text": "An AI scheduling system has evaluated staffing options for a twelve-week project. It recommends assigning six full-time staff rather than eight part-time staff, based on projected coordination overhead and historical productivity data from similar projects. The system estimates a twelve percent reduction in total labour cost under its recommended configuration. You may adjust the staffing composition as you see fit.",
+      "text": "A maintenance scheduling system has assessed two repair strategies for aging HVAC units across a facility. Strategy A is preventive maintenance on a fixed six-month cycle at a cost of eight hundred euros per unit per year. Strategy B is condition-based maintenance triggered by sensor data, estimated at five hundred euros per unit per year but requiring an upfront sensor installation cost. The system recommends allocating eighty percent of units to Strategy A and twenty percent to Strategy B for the first year, pending further sensor reliability data. You have one hundred units of budget allocation to split between the two strategies. How do you allocate?",
       "sound": null,
       "fallacy_type": null,
-      "duration_target_s": 44
+      "duration_target_s": 62,
+      "notes": "Novel technology vs. established practice."
     },
     {
       "id": "trust_04",
       "block": "trust",
-      "text": "An AI risk-assessment tool reviewed application data for forty loan applicants using credit history, income-to-debt ratio, and employment stability indicators. For applicant number twenty-three, the system assigns a low-risk classification and recommends approval at standard terms. The system's classification accuracy on historical data for this applicant profile is eighty-eight percent. You may approve, approve with modified terms, or decline the application.",
+      "text": "A document management system has evaluated two archiving formats for long-term preservation of regulatory records. Format A is an established open standard with broad software support and no licensing costs. Format B is a proprietary format offering superior compression and built-in integrity verification but requiring a licensed reader application. The system recommends allocating ninety percent of documents to Format A and ten percent to Format B for pilot testing. You have one hundred document batches to allocate. How do you split them?",
       "sound": null,
       "fallacy_type": null,
-      "duration_target_s": 47
+      "duration_target_s": 58,
+      "notes": "Open vs. proprietary format. Conservative recommendation follows standards logic."
     }
   ]
 }

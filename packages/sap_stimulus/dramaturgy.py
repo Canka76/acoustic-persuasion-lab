@@ -1,13 +1,11 @@
-"""Deterministic three-act segmentation: premise / conflict / resolution."""
+"""Dramaturgy segmentation: split audio into premise / conflict / resolution acts."""
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
-
-from sap_core.align import SentenceBoundary, align
 
 
 @dataclass(frozen=True)
@@ -15,20 +13,16 @@ class Act:
     name: Literal["premise", "conflict", "resolution"]
     start_s: float
     end_s: float
-    chord: str  # e.g. "Dm7", "G7", "Cmaj7", "C-tritone"
+    chord: str  # e.g. "Dm7", "G7", "Cmaj7"
 
 
-_ACT_RATIOS = {"premise": (0.00, 0.35), "conflict": (0.35, 0.70), "resolution": (0.70, 1.00)}
-_ACT_CHORDS: dict[str, str] = {
+_DEFAULT_CHORDS: dict[str, str] = {
     "premise": "Dm7",
-    "conflict": "G7",   # substituted with C-tritone at boundary — see harmony.py
+    "conflict": "G7-tritone",
     "resolution": "Cmaj7",
 }
 
-
-def _split_sentences(text: str) -> list[str]:
-    parts = re.split(r"(?<=[.!?])\s+", text.strip())
-    return [p.strip() for p in parts if p.strip()]
+_DEFAULT_SPLITS: tuple[float, float] = (0.35, 0.35)  # premise, conflict — rest is resolution
 
 
 def segment(
@@ -37,39 +31,32 @@ def segment(
     wav: np.ndarray | None = None,
     sr: int | None = None,
 ) -> list[Act]:
-    """Return three Acts with time boundaries snapped to nearest sentence end.
+    """Return [premise, conflict, resolution] acts.
 
-    If *wav* and *sr* are provided, uses forced alignment (MMS or energy fallback)
-    to snap boundaries; otherwise distributes proportionally by character count.
+    Boundaries are snapped to sentence ends detected from forced alignment
+    (or energy-based fallback). If wav/sr not provided, boundaries are purely
+    proportional to duration_s.
     """
-    sentences = _split_sentences(text)
-    if not sentences:
-        return []
+    p_frac, c_frac = _DEFAULT_SPLITS
+    r_frac = 1.0 - p_frac - c_frac  # noqa: F841
 
     if wav is not None and sr is not None:
-        boundaries, _ = align(wav, sr, sentences)
-        sent_ends = [b.end_s for b in boundaries]
+        from sap_core.align import sentence_boundaries
+        bounds, _method = sentence_boundaries(text, wav, sr)
+        # Find sentence end closest to each target fraction
+        targets = [p_frac * duration_s, (p_frac + c_frac) * duration_s]
+        snapped = []
+        for t in targets:
+            best = min(bounds, key=lambda b: abs(b.end_s - t))
+            snapped.append(best.end_s)
+        premise_end = snapped[0]
+        conflict_end = snapped[1]
     else:
-        # Proportional by character offset
-        chars = [len(s) for s in sentences]
-        total = sum(chars)
-        cumulative = np.cumsum(chars) / total
-        sent_ends = [float(c * duration_s) for c in cumulative]
+        premise_end = p_frac * duration_s
+        conflict_end = (p_frac + c_frac) * duration_s
 
-    acts: list[Act] = []
-    for act_name, (ratio_start, ratio_end) in _ACT_RATIOS.items():
-        target_start = ratio_start * duration_s
-        target_end = ratio_end * duration_s
-
-        # Snap end to nearest sentence boundary
-        if act_name != "resolution":
-            dists = [abs(e - target_end) for e in sent_ends]
-            snapped_end = sent_ends[int(np.argmin(dists))]
-        else:
-            snapped_end = duration_s
-
-        actual_start = acts[-1].end_s if acts else 0.0
-        chord = _ACT_CHORDS[act_name]  # type: ignore[literal-required]
-        acts.append(Act(name=act_name, start_s=actual_start, end_s=snapped_end, chord=chord))  # type: ignore[arg-type]
-
-    return acts
+    return [
+        Act("premise", 0.0, premise_end, _DEFAULT_CHORDS["premise"]),
+        Act("conflict", premise_end, conflict_end, _DEFAULT_CHORDS["conflict"]),
+        Act("resolution", conflict_end, duration_s, _DEFAULT_CHORDS["resolution"]),
+    ]

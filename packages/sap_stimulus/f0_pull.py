@@ -1,52 +1,65 @@
 """F0 pitch-pull toward chord tones via WORLD analysis/synthesis."""
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
-from sap_stimulus.dramaturgy import Act
-from sap_stimulus.harmony import nearest_chord_tone_hz
+from .dramaturgy import Act
+from .harmony import nearest_chord_tone_hz
 
-_MAX_SHIFT_CENTS = 60.0
+
+MAX_SHIFT_CENTS: float = 60.0
+DEFAULT_STRENGTH: float = 0.175
 
 
 def pull_f0(
     wav: np.ndarray,
     sr: int,
     acts: list[Act],
-    strength: float = 0.175,
+    strength: float = DEFAULT_STRENGTH,
 ) -> np.ndarray:
-    """Return resynthesised WAV with voiced F0 pulled toward the act's chord tones.
-
-    Uses WORLD (pyworld): harvest → cheaptrick → d4c → synthesize.
-    Per-frame change clamped to ≤ 60 cents.
-    Unvoiced frames are untouched.
     """
-    import pyworld as pw  # type: ignore[import]
+    WORLD analysis → shift F0 toward nearest chord tone → resynthesize.
+    Unvoiced frames untouched. Per-frame shift clamped to MAX_SHIFT_CENTS.
+    """
+    try:
+        import pyworld as pw
+    except ImportError as e:
+        raise ImportError("pyworld required for f0_pull") from e
 
+    frame_period_ms = 5.0
     wav64 = wav.astype(np.float64)
-    f0, t = pw.harvest(wav64, sr)
+    f0, t = pw.harvest(wav64, sr, frame_period=frame_period_ms)
     sp = pw.cheaptrick(wav64, f0, t, sr)
     ap = pw.d4c(wav64, f0, t, sr)
 
-    # Build a lookup: frame time → chord for the current act
-    def _chord_for_time(time_s: float) -> str:
-        for act in reversed(acts):
-            if time_s >= act.start_s:
-                return act.chord
-        return acts[0].chord
+    frame_period_s = frame_period_ms / 1000.0
+    times_s = np.arange(len(f0)) * frame_period_s
 
+    act_lookup = _make_act_lookup(acts)
     new_f0 = f0.copy()
-    for i, (time_s, f0_val) in enumerate(zip(t, f0)):
-        if f0_val <= 0.0:  # unvoiced
+
+    for i, t_s in enumerate(times_s):
+        if f0[i] <= 0:
+            continue  # unvoiced
+        act = act_lookup(t_s)
+        if act is None:
             continue
-        chord = _chord_for_time(time_s)
-        target = nearest_chord_tone_hz(f0_val, chord)
+        target_hz = nearest_chord_tone_hz(f0[i], act.chord)
+        f0_cand = f0[i] * (1.0 - strength) + target_hz * strength
+        # Clamp to MAX_SHIFT_CENTS
+        cents = 1200.0 * np.log2(f0_cand / f0[i])
+        if abs(cents) > MAX_SHIFT_CENTS:
+            f0_cand = f0[i] * (2.0 ** (np.sign(cents) * MAX_SHIFT_CENTS / 1200.0))
+        new_f0[i] = f0_cand
 
-        cents_diff = 1200.0 * math.log2(target / f0_val)
-        clamped_cents = max(-_MAX_SHIFT_CENTS, min(_MAX_SHIFT_CENTS, cents_diff * strength / 0.175))
-        new_f0[i] = f0_val * (2 ** (clamped_cents / 1200.0))
+    out64 = pw.synthesize(new_f0, sp, ap, sr, frame_period=frame_period_ms)
+    return out64.astype(np.float32)
 
-    out = pw.synthesize(new_f0, sp, ap, sr)
-    return out.astype(np.float32)
+
+def _make_act_lookup(acts: list[Act]):
+    def lookup(t: float) -> Act | None:
+        for act in acts:
+            if act.start_s <= t < act.end_s:
+                return act
+        return acts[-1] if acts else None
+    return lookup

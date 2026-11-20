@@ -1,0 +1,23 @@
+{
+  "parameters": {
+    "n_sims": 1000,
+    "n_per_arm": 68,
+    "effect_delta_dprime": 0.45,
+    "dprime_mean_a": 0.8,
+    "dprime_sd": 0.9,
+    "alpha": 0.05,
+    "seed": 42
+  },
+  "power": {
+    "anova": 0.839,
+    "contrast_BA": 0.815
+  },
+  "type1_error": {
+    "anova": 0.056,
+    "contrast_BA": 0.059
+  },
+  "gate_pass": {
+    "power_ge_0.80": true,
+    "type1_in_range": true
+  }
+}

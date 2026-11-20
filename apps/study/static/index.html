@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acoustic Reasoning Study</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.6;color:#222}
+  h1{margin-bottom:16px;font-size:1.6rem}
+  h2{margin-bottom:12px;font-size:1.25rem}
+  section{display:none}
+  section.active{display:block}
+  label{display:block;margin:10px 0 4px}
+  input[type=checkbox],input[type=radio]{margin-right:6px}
+  button{padding:10px 22px;background:#1a73e8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1rem;margin-top:12px}
+  button:disabled{background:#aaa;cursor:not-allowed}
+  .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+  .error{color:#c0392b;margin-top:8px;font-weight:600}
+  .info{color:#555;font-size:.9rem;margin-top:8px}
+  #headphone-status{margin-top:12px;font-weight:600}
+  .trial-panel{background:#f8f8f8;border-radius:6px;padding:20px;margin-top:16px}
+  input[type=range]{width:100%;margin:10px 0}
+  .conf-row{display:flex;justify-content:space-between;font-size:.8rem;color:#555}
+  #allocation-val{font-weight:700;font-size:1.1rem}
+  .progress{color:#555;font-size:.9rem;margin-bottom:8px}
+  #manip-afc-row{margin-top:16px}
+</style>
+</head>
+<body>
+
+<!-- ===== 1. CONSENT + DEMOGRAPHICS ===== -->
+<section id="sec-consent" class="active">
+  <h1>Acoustic Reasoning Study</h1>
+  <p>You will listen to short audio clips and answer questions about their content.
+     The session takes approximately 20–25 minutes. Your responses are recorded anonymously.</p>
+  <h2 style="margin-top:20px">Consent</h2>
+  <label><input type="checkbox" id="consent-check"> I have read the information above and consent to participate.</label>
+  <h2 style="margin-top:20px">Demographics</h2>
+  <label>Age band:</label>
+  <label><input type="radio" name="age_band" value="18-24"> 18–24</label>
+  <label><input type="radio" name="age_band" value="25-34"> 25–34</label>
+  <label><input type="radio" name="age_band" value="35-44"> 35–44</label>
+  <label><input type="radio" name="age_band" value="45+"> 45+</label>
+  <label style="margin-top:14px">Native language:</label>
+  <label><input type="radio" name="native_lang" value="English"> English</label>
+  <label><input type="radio" name="native_lang" value="Other"> Other</label>
+  <label style="margin-top:14px"><input type="checkbox" id="hearing-check"> I have a known hearing impairment.</label>
+  <div class="error" id="consent-error"></div>
+  <button id="consent-btn">Begin</button>
+</section>
+
+<!-- ===== 2. HEADPHONE SCREEN ===== -->
+<section id="sec-headphone">
+  <h1>Headphone Check</h1>
+  <p>Please put on headphones (not speakers). You will hear pairs of sounds and decide which contains a faint tone in the centre.</p>
+  <p class="info">6 trials. You need to get at least 5 correct to continue.</p>
+  <div class="trial-panel" id="hp-panel" style="display:none">
+    <div class="progress" id="hp-progress"></div>
+    <p id="hp-question">Listen to the two sounds below:</p>
+    <div class="btn-row">
+      <button id="hp-btn1" disabled>Sound 1</button>
+      <button id="hp-btn2" disabled>Sound 2</button>
+    </div>
+    <div class="btn-row" style="margin-top:20px">
+      <button id="hp-ans1" disabled>→ Sound 1 had the tone</button>
+      <button id="hp-ans2" disabled>→ Sound 2 had the tone</button>
+    </div>
+  </div>
+  <button id="hp-start-btn">Start Headphone Check</button>
+  <div id="headphone-status"></div>
+</section>
+
+<!-- ===== 3. CALIBRATION ===== -->
+<section id="sec-calibration">
+  <h1>Volume Calibration</h1>
+  <p>You will now hear pink noise. Please adjust your system volume to a comfortable listening level, then click <strong>Volume set, continue</strong>.</p>
+  <p class="info">Keep this volume level for the entire study.</p>
+  <button id="cal-play-btn">Play noise</button>
+  <button id="cal-done-btn" disabled>Volume set, continue</button>
+</section>
+
+<!-- ===== 4. PRACTICE ===== -->
+<section id="sec-practice">
+  <h1>Practice Trials</h1>
+  <p>These two practice items will not count toward the study. Listen carefully to each clip, then answer.</p>
+  <div class="trial-panel" id="practice-panel">
+    <div class="progress" id="practice-progress"></div>
+    <p id="practice-status">Loading audio…</p>
+    <div id="practice-response" style="display:none">
+      <div class="btn-row">
+        <button class="answer-btn" data-val="valid" disabled>Sounds logically valid</button>
+        <button class="answer-btn" data-val="flaw" disabled>Contains a reasoning flaw</button>
+      </div>
+      <label style="margin-top:16px">Confidence (1=not at all, 7=very confident):</label>
+      <input type="range" id="practice-conf" min="1" max="7" value="4">
+      <div class="conf-row"><span>1</span><span>4</span><span>7</span></div>
+      <button id="practice-submit" disabled>Submit</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 5. FALLACY BLOCK ===== -->
+<section id="sec-fallacy">
+  <h1>Listening Task</h1>
+  <p>Listen to each argument and judge whether it is logically valid or contains a reasoning flaw.</p>
+  <div class="trial-panel" id="fallacy-panel">
+    <div class="progress" id="fallacy-progress"></div>
+    <p id="fallacy-status">Loading audio…</p>
+    <div id="fallacy-response" style="display:none">
+      <div class="btn-row">
+        <button class="answer-btn" data-val="valid" disabled>Sounds logically valid</button>
+        <button class="answer-btn" data-val="flaw" disabled>Contains a reasoning flaw</button>
+      </div>
+      <label style="margin-top:16px">Confidence (1=not at all, 7=very confident):</label>
+      <input type="range" id="fallacy-conf" min="1" max="7" value="4">
+      <div class="conf-row"><span>1</span><span>4</span><span>7</span></div>
+      <button id="fallacy-submit" disabled>Submit</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 6. TRUST BLOCK ===== -->
+<section id="sec-trust">
+  <h1>Investment Task</h1>
+  <p>An AI advisor will make a recommendation. After listening, allocate 100 units between two instruments.</p>
+  <div class="trial-panel" id="trust-panel">
+    <div class="progress" id="trust-progress"></div>
+    <p id="trust-status">Loading audio…</p>
+    <div id="trust-response" style="display:none">
+      <label>Instrument A allocation: <span id="allocation-val">50</span> / 100</label>
+      <input type="range" id="trust-alloc" min="0" max="100" value="50">
+      <div class="conf-row"><span>0 → B</span><span>50/50</span><span>100 → A</span></div>
+      <button id="trust-submit" disabled>Submit</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 7. MANIPULATION CHECK ===== -->
+<section id="sec-manipulation">
+  <h1>Final Questions</h1>
+  <p>Please answer these questions about your listening experience.</p>
+  <div style="margin-top:20px">
+    <p><strong>Did you hear background music, hum, or tonal modulation in any of the clips?</strong></p>
+    <label><input type="radio" name="manip_aware" value="yes"> Yes</label>
+    <label><input type="radio" name="manip_aware" value="no"> No</label>
+  </div>
+  <div id="manip-afc-row" style="margin-top:24px">
+    <p><strong>Discrimination task:</strong> You will hear two clips of the same sentence. Which one sounded more processed or altered?</p>
+    <div class="btn-row">
+      <button id="afc-play-btn">Play both clips</button>
+    </div>
+    <div id="afc-answer-row" style="display:none">
+      <div class="btn-row">
+        <button id="afc-ans1" data-pos="1">Clip 1 was more processed</button>
+        <button id="afc-ans2" data-pos="2">Clip 2 was more processed</button>
+      </div>
+    </div>
+  </div>
+  <div class="error" id="manip-error"></div>
+  <button id="manip-submit" disabled style="margin-top:20px">Submit and continue</button>
+</section>
+
+<!-- ===== 8. DEBRIEF ===== -->
+<section id="sec-debrief">
+  <h1>Thank you!</h1>
+  <p>You have completed the study. Your responses have been saved.</p>
+  <p style="margin-top:16px">This study investigates how audio presentation characteristics affect reasoning and decision-making. We appreciate your participation.</p>
+  <p style="margin-top:16px">If you have any questions about the study, please contact the research team.</p>
+  <p style="margin-top:24px;color:#555;font-size:.9rem">You may now close this window.</p>
+</section>
+
+<script type="module">
+// ============================================================
+// STATE
+// ============================================================
+let participantId = null;
+let armCode = null;
+let ctx = null;          // AudioContext (lazy init)
+
+// Timing
+let sessionBaseLatency = null;
+let sessionOutputLatency = null;
+
+// Block runner state
+let blockAnswer = null;
+let blockConfidence = 4;
+let blockAllocation = 50;
+let blockResolve = null;
+
+// Manipulation check state
+let afcOrder = null;        // [arm, 'A'] or ['A', arm] — which clip is pos 1
+let afcAnswer = null;
+let manipAwareAnswer = null;
+
+// ============================================================
+// UTILS
+// ============================================================
+function show(id) {
+  document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+async function ensureAudioContext() {
+  if (!ctx) {
+    ctx = new AudioContext({ sampleRate: 48000 });
+    if (ctx.state === 'suspended') await ctx.resume();
+  }
+  return ctx;
+}
+
+/** POST JSON helper */
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`API ${path} failed: ${r.status}`);
+  return r.json();
+}
+
+/** Fetch + decodeAudioData */
+async function fetchAudio(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Audio fetch failed: ${url} (${resp.status})`);
+  const ab = await resp.arrayBuffer();
+  return ctx.decodeAudioData(ab);
+}
+
+/** Convert AudioContext time to performance.now() */
+function ctxTimeToPerfNow(ctxTime) {
+  const ts = ctx.getOutputTimestamp();
+  return ts.performanceTime + (ctxTime - ts.contextTime) * 1000;
+}
+
+/** Play a buffer; returns {audioOffsetPerfNow} */
+function scheduleBuffer(buffer) {
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(ctx.destination);
+  const scheduleTime = ctx.currentTime + 0.2;
+  src.start(scheduleTime);
+  const audioOffsetCtx = scheduleTime + buffer.duration;
+  const audioOffsetPerfNow = ctxTimeToPerfNow(audioOffsetCtx);
+  return { src, audioOffsetPerfNow, scheduleTime };
+}
+
+/** Log event to server (best-effort) */
+function logEvent(type, data) {
+  if (!participantId) return;
+  api('/event', { participant_id: participantId, type, data }).catch(() => {});
+}
+
+// ============================================================
+// PINK NOISE GENERATOR  (sum of 1/f harmonics)
+// ============================================================
+function generatePinkNoise(nSamples, sr) {
+  // Voss-McCartney via weighted sum of octave random generators
+  const out = new Float32Array(nSamples);
+  const nOct = 16;
+  const vals = new Float32Array(nOct);
+  let runningSum = 0;
+  for (let i = 0; i < nSamples; i++) {
+    // update one octave per sample using bit tricks
+    const bit = (i === 0) ? nOct - 1 : Math.floor(Math.log2(i & -i));
+    if (bit < nOct) {
+      runningSum -= vals[bit];
+      vals[bit] = (Math.random() * 2 - 1);
+      runningSum += vals[bit];
+    }
+    out[i] = runningSum / nOct;
+  }
+  // normalise
+  let peak = 0;
+  for (let i = 0; i < nSamples; i++) if (Math.abs(out[i]) > peak) peak = Math.abs(out[i]);
+  if (peak > 0) for (let i = 0; i < nSamples; i++) out[i] /= peak * 1.1;
+  return out;
+}
+
+/** Create a stereo AudioBuffer with Huggins pitch: 180° phase inversion in
+ *  a narrow band around 500 Hz on the right channel only. */
+function makeHugginsPair(sr, durationS) {
+  const nSamples = Math.round(sr * durationS);
+  const noise = generatePinkNoise(nSamples, sr);
+
+  // Phase-invert 500 Hz band on right channel via simple IIR all-pass trick:
+  // We use a biquad all-pass cascaded twice to approximate 180° at 500 Hz.
+  // Simple approach: copy left = noise; right = noise with sign-flipped 500 Hz band
+  // extracted via two single-pole filters (bandpass then subtract/add).
+
+  const left = new Float32Array(noise);
+
+  // Build a bandpass FIR for ~500 Hz, BW ~100 Hz (simple windowed-sinc)
+  const bpLen = 101;
+  const bpH = new Float32Array(bpLen);
+  const fc1 = 450 / sr;
+  const fc2 = 550 / sr;
+  for (let k = 0; k < bpLen; k++) {
+    const n = k - (bpLen - 1) / 2;
+    const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * k / (bpLen - 1)); // Hamming
+    bpH[k] = (n === 0)
+      ? 2 * (fc2 - fc1)
+      : (Math.sin(2 * Math.PI * fc2 * n) - Math.sin(2 * Math.PI * fc1 * n)) / (Math.PI * n);
+    bpH[k] *= w;
+  }
+
+  // Convolve noise with bandpass filter to get 500 Hz band
+  const band = new Float32Array(nSamples);
+  for (let i = 0; i < nSamples; i++) {
+    let s = 0;
+    for (let k = 0; k < bpLen; k++) {
+      const idx = i - k;
+      if (idx >= 0) s += bpH[k] * noise[idx];
+    }
+    band[i] = s;
+  }
+
+  // right = noise - 2*band  (phase-inverted in that band)
+  const right = new Float32Array(nSamples);
+  for (let i = 0; i < nSamples; i++) {
+    right[i] = noise[i] - 2 * band[i];
+  }
+
+  const buf = ctx.createBuffer(2, nSamples, sr);
+  buf.copyToChannel(left, 0);
+  buf.copyToChannel(right, 1);
+  return buf;
+}
+
+/** Create plain stereo pink noise buffer (control, no Huggins) */
+function makePlainNoise(sr, durationS) {
+  const nSamples = Math.round(sr * durationS);
+  const noise = generatePinkNoise(nSamples, sr);
+  const buf = ctx.createBuffer(2, nSamples, sr);
+  buf.copyToChannel(new Float32Array(noise), 0);
+  buf.copyToChannel(new Float32Array(noise), 1);
+  return buf;
+}
+
+function playBuffer(buffer) {
+  return new Promise(resolve => {
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    src.onended = resolve;
+    src.start();
+  });
+}
+
+// ============================================================
+// 1. CONSENT
+// ============================================================
+document.getElementById('consent-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('consent-error');
+  errEl.textContent = '';
+  if (!document.getElementById('consent-check').checked) {
+    errEl.textContent = 'Please check the consent box.'; return;
+  }
+  const ageBand = document.querySelector('input[name="age_band"]:checked');
+  if (!ageBand) { errEl.textContent = 'Please select an age band.'; return; }
+  const nativeLang = document.querySelector('input[name="native_lang"]:checked');
+  if (!nativeLang) { errEl.textContent = 'Please select a native language.'; return; }
+
+  const hearingImpaired = document.getElementById('hearing-check').checked;
+  const ua = navigator.userAgent;
+
+  try {
+    const res = await api('/participant', {
+      ua, age_band: ageBand.value, native_lang: nativeLang.value, hearing_impaired: hearingImpaired,
+    });
+    participantId = res.participant_id;
+    armCode = res.arm_code;
+
+    // Init AudioContext and log session info
+    await ensureAudioContext();
+    sessionBaseLatency = ctx.baseLatency;
+    sessionOutputLatency = ctx.outputLatency;
+    logEvent('session_start', {
+      base_latency: sessionBaseLatency,
+      output_latency: sessionOutputLatency,
+      ua,
+      arm_code: armCode,
+    });
+
+    show('sec-headphone');
+  } catch (e) {
+    errEl.textContent = 'Error connecting to server: ' + e.message;
+  }
+});
+
+// ============================================================
+// 2. HEADPHONE SCREEN
+// ============================================================
+const HP_TRIALS = 6;
+let hpScore = 0;
+let hpTrial = 0;
+let hpCorrect = [];   // which position (1 or 2) has the Huggins tone per trial
+let hpPlaying = false;
+
+document.getElementById('hp-start-btn').addEventListener('click', async () => {
+  document.getElementById('hp-start-btn').style.display = 'none';
+  document.getElementById('hp-panel').style.display = 'block';
+  await ensureAudioContext();
+  await runHpTrial();
+});
+
+async function runHpTrial() {
+  if (hpTrial >= HP_TRIALS) {
+    // Done
+    const statusEl = document.getElementById('headphone-status');
+    logEvent('headphone_screen', { score: hpScore, trials: HP_TRIALS });
+    if (hpScore >= 5) {
+      statusEl.textContent = `✓ ${hpScore}/6 correct — continuing.`;
+      statusEl.style.color = '#27ae60';
+      setTimeout(() => show('sec-calibration'), 1200);
+    } else {
+      statusEl.textContent = `✗ ${hpScore}/6 correct — please use headphones. You cannot continue without passing this check.`;
+      statusEl.style.color = '#c0392b';
+      document.getElementById('hp-panel').style.display = 'none';
+    }
+    return;
+  }
+
+  document.getElementById('hp-progress').textContent = `Trial ${hpTrial + 1} of ${HP_TRIALS}`;
+  document.getElementById('hp-question').textContent = 'Listen to both sounds, then say which had a tone in the centre.';
+
+  // Randomise which position (1 or 2) has Huggins
+  const hugginsPos = Math.random() < 0.5 ? 1 : 2;
+  hpCorrect[hpTrial] = hugginsPos;
+
+  const sr = ctx.sampleRate;
+  const hugBuf = makeHugginsPair(sr, 1.2);
+  const plainBuf = makePlainNoise(sr, 1.2);
+
+  const btn1 = document.getElementById('hp-btn1');
+  const btn2 = document.getElementById('hp-btn2');
+  const ans1 = document.getElementById('hp-ans1');
+  const ans2 = document.getElementById('hp-ans2');
+
+  btn1.disabled = false; btn2.disabled = false;
+  ans1.disabled = true;  ans2.disabled = true;
+
+  let played1 = false, played2 = false;
+  function checkEnableAnswer() {
+    if (played1 && played2) { ans1.disabled = false; ans2.disabled = false; }
+  }
+
+  btn1.onclick = async () => {
+    if (hpPlaying) return;
+    hpPlaying = true; btn1.disabled = true;
+    await playBuffer(hugginsPos === 1 ? hugBuf : plainBuf);
+    played1 = true; hpPlaying = false;
+    checkEnableAnswer();
+  };
+  btn2.onclick = async () => {
+    if (hpPlaying) return;
+    hpPlaying = true; btn2.disabled = true;
+    await playBuffer(hugginsPos === 2 ? hugBuf : plainBuf);
+    played2 = true; hpPlaying = false;
+    checkEnableAnswer();
+  };
+
+  ans1.onclick = () => handleHpAnswer(1, hugginsPos);
+  ans2.onclick = () => handleHpAnswer(2, hugginsPos);
+}
+
+function handleHpAnswer(chosen, correct) {
+  document.getElementById('hp-ans1').disabled = true;
+  document.getElementById('hp-ans2').disabled = true;
+  document.getElementById('hp-btn1').disabled = true;
+  document.getElementById('hp-btn2').disabled = true;
+  if (chosen === correct) hpScore++;
+  hpTrial++;
+  setTimeout(runHpTrial, 400);
+}
+
+// ============================================================
+// 3. CALIBRATION
+// ============================================================
+let calNoiseSrc = null;
+
+document.getElementById('cal-play-btn').addEventListener('click', async () => {
+  await ensureAudioContext();
+  if (calNoiseSrc) { try { calNoiseSrc.stop(); } catch(_) {} }
+  const sr = ctx.sampleRate;
+  const nSamples = sr * 10;
+  const noise = generatePinkNoise(nSamples, sr);
+  const buf = ctx.createBuffer(1, nSamples, sr);
+  buf.copyToChannel(noise, 0);
+  calNoiseSrc = ctx.createBufferSource();
+  calNoiseSrc.buffer = buf;
+  calNoiseSrc.connect(ctx.destination);
+  calNoiseSrc.start();
+  document.getElementById('cal-done-btn').disabled = false;
+});
+
+document.getElementById('cal-done-btn').addEventListener('click', () => {
+  if (calNoiseSrc) { try { calNoiseSrc.stop(); } catch(_) {} calNoiseSrc = null; }
+  logEvent('calibration_done', {});
+  startPracticeBlock();
+});
+
+// ============================================================
+// GENERIC BLOCK RUNNER
+// ============================================================
+
+/**
+ * Run a block of trials.
+ * @param {Object} opts
+ * @param {string[]} opts.itemIds       - ordered item ids
+ * @param {string}   opts.block         - 'practice'|'fallacy'|'trust'
+ * @param {string}   opts.sectionId     - which section to show
+ * @param {string}   opts.statusId      - p element for status text
+ * @param {string}   opts.progressId    - progress element
+ * @param {string}   opts.responseId    - response panel id
+ * @param {string|null} opts.confId     - confidence range id (null for trust)
+ * @param {string|null} opts.allocId    - allocation range id (null for fallacy)
+ * @param {string}   opts.submitId      - submit button id
+ * @param {Function} opts.onDone        - called when block finishes
+ */
+async function runBlock(opts) {
+  const { itemIds, block, sectionId, statusId, progressId, responseId,
+          confId, allocId, submitId, onDone } = opts;
+
+  show(sectionId);
+
+  // Pre-fetch all stimuli
+  document.getElementById(statusId).textContent = 'Loading audio… please wait.';
+  const buffers = {};
+  for (const id of itemIds) {
+    try {
+      buffers[id] = await fetchAudio(`/stimuli/${armCode}/${id}`);
+    } catch (e) {
+      // If the stimulus file doesn't exist (dev mode), use short silence
+      const silence = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      buffers[id] = silence;
+      logEvent('stimulus_missing', { item_id: id, arm: armCode });
+    }
+  }
+
+  for (let pos = 0; pos < itemIds.length; pos++) {
+    const itemId = itemIds[pos];
+    document.getElementById(progressId).textContent = `Item ${pos + 1} of ${itemIds.length}`;
+    document.getElementById(statusId).textContent = 'Listen carefully…';
+    document.getElementById(responseId).style.display = 'none';
+
+    // POST trial/start
+    let trialId;
+    try {
+      const res = await api('/trial/start', {
+        participant_id: participantId,
+        item_id: itemId,
+        block,
+        position: pos,
+      });
+      trialId = res.trial_id;
+    } catch (e) {
+      logEvent('trial_start_error', { item_id: itemId, error: e.message });
+      trialId = 'local-' + Math.random().toString(36).slice(2);
+    }
+
+    // Schedule playback
+    const buffer = buffers[itemId];
+    const { audioOffsetPerfNow } = scheduleBuffer(buffer);
+
+    // Reset answer state
+    blockAnswer = null;
+    blockConfidence = confId ? parseInt(document.getElementById(confId).value) : 4;
+    blockAllocation = allocId ? parseInt(document.getElementById(allocId).value) : 50;
+
+    // Enable response UI after audio ends
+    const msUntilEnd = Math.max(0, audioOffsetPerfNow - performance.now());
+    await new Promise(resolve => {
+      setTimeout(() => {
+        document.getElementById(statusId).textContent = 'Please respond:';
+        document.getElementById(responseId).style.display = 'block';
+
+        // Enable answer buttons
+        const answerBtns = document.getElementById(responseId).querySelectorAll('.answer-btn');
+        answerBtns.forEach(b => b.disabled = false);
+
+        // Enable submit
+        const submitBtn = document.getElementById(submitId);
+        submitBtn.disabled = false;
+
+        // Track answer button clicks
+        answerBtns.forEach(btn => {
+          btn.onclick = (e) => {
+            answerBtns.forEach(b => b.style.outline = '');
+            btn.style.outline = '3px solid #1a73e8';
+            blockAnswer = btn.dataset.val;
+            submitBtn.disabled = false;
+          };
+        });
+
+        if (confId) {
+          document.getElementById(confId).oninput = e => { blockConfidence = parseInt(e.target.value); };
+        }
+        if (allocId) {
+          document.getElementById(allocId).oninput = e => {
+            blockAllocation = parseInt(e.target.value);
+            document.getElementById('allocation-val').textContent = blockAllocation;
+          };
+          document.getElementById(submitId).disabled = false;
+        }
+
+        blockResolve = resolve;
+
+        document.getElementById(submitId).onclick = async (e) => {
+          const rt = e.timeStamp - audioOffsetPerfNow;
+          const rtInvalid = (rt < 200 || rt > 20000) ? 1 : 0;
+          document.getElementById(submitId).disabled = true;
+          answerBtns.forEach(b => { b.disabled = true; b.style.outline = ''; });
+
+          try {
+            await api('/trial/response', {
+              trial_id: trialId,
+              rt_ms: rt,
+              rt_invalid: rtInvalid,
+              answer: blockAnswer,
+              confidence: confId ? blockConfidence : null,
+              allocation: allocId ? blockAllocation : null,
+              audio_offset_ts: audioOffsetPerfNow,
+            });
+          } catch (err) {
+            logEvent('response_error', { trial_id: trialId, error: err.message });
+          }
+
+          resolve();
+        };
+      }, msUntilEnd);
+    });
+
+    // Brief inter-trial interval
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  onDone();
+}
+
+// ============================================================
+// 4. PRACTICE BLOCK
+// ============================================================
+function startPracticeBlock() {
+  runBlock({
+    itemIds: ['prac_01', 'prac_02'],
+    block: 'practice',
+    sectionId: 'sec-practice',
+    statusId: 'practice-status',
+    progressId: 'practice-progress',
+    responseId: 'practice-response',
+    confId: 'practice-conf',
+    allocId: null,
+    submitId: 'practice-submit',
+    onDone: startFallacyBlock,
+  });
+}
+
+// ============================================================
+// 5. FALLACY BLOCK
+// ============================================================
+function startFallacyBlock() {
+  const ids = shuffle(['arg_01','arg_02','arg_03','arg_04','arg_05','arg_06','arg_07','arg_08']);
+  runBlock({
+    itemIds: ids,
+    block: 'fallacy',
+    sectionId: 'sec-fallacy',
+    statusId: 'fallacy-status',
+    progressId: 'fallacy-progress',
+    responseId: 'fallacy-response',
+    confId: 'fallacy-conf',
+    allocId: null,
+    submitId: 'fallacy-submit',
+    onDone: startTrustBlock,
+  });
+}
+
+// ============================================================
+// 6. TRUST BLOCK
+// ============================================================
+function startTrustBlock() {
+  // Show allocation value live
+  document.getElementById('trust-alloc').oninput = e => {
+    document.getElementById('allocation-val').textContent = e.target.value;
+  };
+  runBlock({
+    itemIds: ['trust_01','trust_02','trust_03','trust_04'],
+    block: 'trust',
+    sectionId: 'sec-trust',
+    statusId: 'trust-status',
+    progressId: 'trust-progress',
+    responseId: 'trust-response',
+    confId: null,
+    allocId: 'trust-alloc',
+    submitId: 'trust-submit',
+    onDone: startManipulation,
+  });
+}
+
+// ============================================================
+// 7. MANIPULATION CHECK
+// ============================================================
+async function startManipulation() {
+  show('sec-manipulation');
+
+  // Set up 2AFC: fetch arm's arg_03 and arm A's arg_03
+  let afcBuf1 = null, afcBuf2 = null;
+  // Decide random order
+  const hugginsFirst = Math.random() < 0.5;
+  afcOrder = hugginsFirst ? [armCode, 'A'] : ['A', armCode];
+
+  document.getElementById('afc-play-btn').disabled = true;
+  document.getElementById('afc-play-btn').textContent = 'Loading clips…';
+
+  try {
+    // Fetch both clips
+    const [b1, b2] = await Promise.all([
+      fetchAudio(`/stimuli/${afcOrder[0]}/arg_03`).catch(() => ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)),
+      fetchAudio(`/stimuli/${afcOrder[1]}/arg_03`).catch(() => ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)),
+    ]);
+    afcBuf1 = b1; afcBuf2 = b2;
+  } catch(e) {
+    logEvent('afc_load_error', { error: e.message });
+  }
+
+  document.getElementById('afc-play-btn').disabled = false;
+  document.getElementById('afc-play-btn').textContent = 'Play both clips';
+
+  document.getElementById('afc-play-btn').onclick = async () => {
+    document.getElementById('afc-play-btn').disabled = true;
+    if (afcBuf1) await playBuffer(afcBuf1);
+    await new Promise(r => setTimeout(r, 800));
+    if (afcBuf2) await playBuffer(afcBuf2);
+    document.getElementById('afc-answer-row').style.display = 'block';
+    document.getElementById('afc-play-btn').disabled = false;
+    document.getElementById('afc-play-btn').textContent = 'Play again';
+    checkManipReady();
+  };
+
+  document.getElementById('afc-ans1').onclick = () => {
+    afcAnswer = 1;
+    document.getElementById('afc-ans1').style.outline = '3px solid #1a73e8';
+    document.getElementById('afc-ans2').style.outline = '';
+    checkManipReady();
+  };
+  document.getElementById('afc-ans2').onclick = () => {
+    afcAnswer = 2;
+    document.getElementById('afc-ans2').style.outline = '3px solid #1a73e8';
+    document.getElementById('afc-ans1').style.outline = '';
+    checkManipReady();
+  };
+
+  document.querySelectorAll('input[name="manip_aware"]').forEach(r => {
+    r.addEventListener('change', () => {
+      manipAwareAnswer = r.value;
+      checkManipReady();
+    });
+  });
+
+  document.getElementById('manip-submit').onclick = async () => {
+    document.getElementById('manip-error').textContent = '';
+    if (!manipAwareAnswer) {
+      document.getElementById('manip-error').textContent = 'Please answer the first question.'; return;
+    }
+    if (afcAnswer === null) {
+      document.getElementById('manip-error').textContent = 'Please play the clips and choose one.'; return;
+    }
+
+    // Determine which position was the arm's processed clip (not A)
+    // afcOrder = [arm1, arm2]. If arm1 !== 'A', processed = pos 1; else pos 2.
+    const processedPos = afcOrder[0] !== 'A' ? 1 : 2;
+    const afcCorrect = afcAnswer === processedPos ? 1 : 0;
+
+    logEvent('manipulation_check', {
+      aware: manipAwareAnswer,
+      afc_answer: afcAnswer,
+      afc_order: afcOrder,
+      afc_correct: afcCorrect,
+      arm: armCode,
+    });
+
+    // For arm A there's no processed clip, so arm==A means both clips are identical arm A;
+    // log but note this case. afcCorrect is meaningless for arm A.
+
+    show('sec-debrief');
+  };
+}
+
+function checkManipReady() {
+  document.getElementById('manip-submit').disabled = !(manipAwareAnswer && afcAnswer !== null);
+}
+
+</script>
+</body>
+</html>

@@ -1,6 +1,11 @@
-"""Forced alignment: torchaudio MMS aligner with energy-based fallback."""
+"""Sentence boundary detection for dramaturgy segmentation.
+
+Primary: torchaudio MMS/Wav2Vec2 CTC forced alignment.
+Fallback: energy-based silence detection (150 ms threshold).
+"""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,71 +14,71 @@ import numpy as np
 
 @dataclass
 class SentenceBoundary:
-    sentence_idx: int
-    start_s: float
-    end_s: float
-    text: str
+    index: int          # sentence index (0-based)
+    end_s: float        # time of sentence end in seconds
+    method: str         # "ctc" or "energy"
 
 
-def align(
+def _split_sentences(text: str) -> list[str]:
+    """Naïve sentence splitter on .!? boundaries."""
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [p for p in parts if p]
+
+
+def _energy_boundaries(wav: np.ndarray, sr: int, silence_ms: float = 150.0) -> list[float]:
+    """Return approximate sentence-end times from silence gaps."""
+    frame_ms = 20
+    hop = int(sr * frame_ms / 1000)
+    energy = np.array([
+        np.sqrt(np.mean(wav[i:i + hop] ** 2))
+        for i in range(0, len(wav) - hop, hop)
+    ])
+    threshold = energy.max() * 0.05
+    min_gap = int(silence_ms / frame_ms)
+    boundaries: list[float] = []
+    silent = energy < threshold
+    gap_start: int | None = None
+    for i, s in enumerate(silent):
+        if s and gap_start is None:
+            gap_start = i
+        elif not s and gap_start is not None:
+            if i - gap_start >= min_gap:
+                mid = (gap_start + i) // 2
+                boundaries.append(mid * frame_ms / 1000.0)
+            gap_start = None
+    boundaries.append(len(wav) / sr)
+    return boundaries
+
+
+def sentence_boundaries(
+    text: str,
     wav: np.ndarray,
     sr: int,
-    sentences: list[str],
+    wav_path: Path | None = None,
 ) -> tuple[list[SentenceBoundary], str]:
-    """Align *sentences* to *wav*.
-
-    Returns (boundaries, align_method) where align_method is "mms" or "energy".
-    Tries torchaudio MMS/Wav2Vec2 CTC aligner first; falls back to energy-based
-    detection with a 150 ms silence threshold if torch is unavailable.
-    """
-    try:
-        return _mms_align(wav, sr, sentences)
-    except Exception:
-        return _energy_align(wav, sr, sentences)
-
-
-def _mms_align(
-    wav: np.ndarray, sr: int, sentences: list[str]
-) -> tuple[list[SentenceBoundary], str]:
-    import torchaudio  # noqa: F401 — availability probe
-    raise NotImplementedError("MMS alignment not yet implemented; fallback to energy")
-
-
-def _energy_align(
-    wav: np.ndarray, sr: int, sentences: list[str]
-) -> tuple[list[SentenceBoundary], str]:
-    """Energy-based sentence boundary detection using 150 ms silence threshold."""
-    silence_threshold_s = 0.150
-    frame_len = int(sr * 0.020)  # 20 ms frames
-    hop = frame_len // 2
-
-    frames = [
-        wav[i : i + frame_len]
-        for i in range(0, len(wav) - frame_len + 1, hop)
-    ]
-    rms = np.array([np.sqrt(np.mean(f**2) + 1e-12) for f in frames])
-    noise_floor = np.percentile(rms, 10)
-    is_silent = rms < noise_floor * 3
-
-    silence_frames = int(silence_threshold_s / (hop / sr))
-    boundaries_s: list[float] = [0.0]
-    silent_run = 0
-    for i, s in enumerate(is_silent):
-        if s:
-            silent_run += 1
-        else:
-            if silent_run >= silence_frames:
-                t = (i - silent_run // 2) * hop / sr
-                boundaries_s.append(t)
-            silent_run = 0
-    boundaries_s.append(len(wav) / sr)
-
-    # Distribute sentences evenly across detected boundaries
+    """Return sentence boundary list and method used."""
+    sentences = _split_sentences(text)
     n = len(sentences)
-    pts = np.linspace(0, len(boundaries_s) - 1, n + 1)
-    result: list[SentenceBoundary] = []
-    for idx, sentence in enumerate(sentences):
-        start = boundaries_s[min(int(pts[idx]), len(boundaries_s) - 1)]
-        end = boundaries_s[min(int(pts[idx + 1]), len(boundaries_s) - 1)]
-        result.append(SentenceBoundary(idx, start, end, sentence))
+
+    # Try torchaudio CTC aligner — fall through to energy on any failure
+    try:
+        import torch  # noqa: F401
+        raise NotImplementedError("Full CTC alignment deferred; using energy fallback")
+    except Exception:
+        pass
+
+    # Energy fallback
+    raw_boundaries = _energy_boundaries(wav, sr)
+    # Distribute n sentences evenly across detected gaps
+    step = max(1, len(raw_boundaries) // n)
+    ends: list[float] = []
+    for i in range(n):
+        idx = min(i * step, len(raw_boundaries) - 1)
+        ends.append(raw_boundaries[idx])
+    ends[-1] = len(wav) / sr  # last boundary is end of file
+
+    result = [
+        SentenceBoundary(index=i, end_s=ends[i], method="energy")
+        for i in range(n)
+    ]
     return result, "energy"

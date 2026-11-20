@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threshold Pilot — Acoustic Persuasion Lab</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f4f4f5;
+    color: #18181b;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    padding: 2rem;
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: 1.25rem;
+  }
+  .headphone-notice {
+    background: #fef9c3;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+    width: 100%;
+    max-width: 640px;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #3f3f46; }
+  .meta { font-size: 0.85rem; color: #71717a; margin-bottom: 1rem; }
+  .progress-bar-wrap {
+    background: #e4e4e7;
+    border-radius: 999px;
+    height: 8px;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: #6366f1;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+  }
+  .progress-label { font-size: 0.8rem; color: #71717a; margin-bottom: 1.25rem; }
+  .track-info {
+    font-size: 0.85rem;
+    color: #52525b;
+    margin-bottom: 1rem;
+    padding: 0.5rem 0.75rem;
+    background: #f1f5f9;
+    border-radius: 6px;
+  }
+  .play-status {
+    font-size: 0.9rem;
+    color: #3f3f46;
+    min-height: 2rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid #d4d4d8;
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  button {
+    flex: 1;
+    padding: 0.85rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  #btn1 { background: #6366f1; color: #fff; }
+  #btn1:not(:disabled):hover { background: #4f46e5; }
+  #btn2 { background: #0ea5e9; color: #fff; }
+  #btn2:not(:disabled):hover { background: #0284c7; }
+  .threshold-display {
+    font-size: 0.85rem;
+    color: #52525b;
+    margin-top: 0.25rem;
+  }
+  .threshold-display span { font-weight: 600; color: #18181b; }
+  .error-box {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: #991b1b;
+    font-size: 0.9rem;
+    display: none;
+    margin-bottom: 1rem;
+  }
+  .done-card {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+  }
+  .done-card h2 { color: #15803d; }
+  .result-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
+  .result-table th, .result-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #d1fae5;
+  }
+  .result-table th { color: #15803d; font-weight: 600; }
+  #main-section { display: block; }
+  #done-section { display: none; }
+</style>
+</head>
+<body>
+
+<div class="headphone-notice">
+  🎧 <strong>Headphones required.</strong> Please wear headphones for the entire session and set a comfortable, consistent volume before you begin.
+</div>
+
+<div class="card" id="main-section">
+  <h1>Threshold Detection Task</h1>
+  <p class="meta">You will hear two audio intervals. One may contain an added acoustic layer; one is unmodified. Select which interval you think was different.</p>
+
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+  <div class="progress-label" id="progress-label">Loading first trial…</div>
+
+  <div class="track-info" id="track-info">Track — / 2</div>
+
+  <div class="play-status" id="play-status">
+    <span class="spinner" id="spinner" style="display:none"></span>
+    <span id="play-text">Preparing audio…</span>
+  </div>
+
+  <div class="error-box" id="error-box"></div>
+
+  <div class="btn-row">
+    <button id="btn1" disabled>Interval 1</button>
+    <button id="btn2" disabled>Interval 2</button>
+  </div>
+
+  <div class="threshold-display" id="threshold-display">Estimated threshold: —</div>
+</div>
+
+<div class="card done-card" id="done-section">
+  <h2>Session Complete ✓</h2>
+  <p style="font-size:0.9rem;color:#166534;margin-bottom:0.5rem;">Both tracks finished. Thresholds saved.</p>
+  <table class="result-table">
+    <thead><tr><th>Track</th><th>Threshold (dB SNR)</th><th>Operating Point</th></tr></thead>
+    <tbody id="result-tbody"></tbody>
+  </table>
+</div>
+
+<script type="module">
+"use strict";
+
+// -------------------------------------------------------------------------
+// State
+// -------------------------------------------------------------------------
+let audioCtx = null;
+let currentTrial = null;   // server response for the current trial
+let buffers = {};          // cache: url -> AudioBuffer
+let responseEnabled = false;
+
+// -------------------------------------------------------------------------
+// DOM refs
+// -------------------------------------------------------------------------
+const progressFill  = document.getElementById('progress-fill');
+const progressLabel = document.getElementById('progress-label');
+const trackInfo     = document.getElementById('track-info');
+const playStatus    = document.getElementById('play-text');
+const spinner       = document.getElementById('spinner');
+const errorBox      = document.getElementById('error-box');
+const btn1          = document.getElementById('btn1');
+const btn2          = document.getElementById('btn2');
+const thresholdDisp = document.getElementById('threshold-display');
+const mainSection   = document.getElementById('main-section');
+const doneSection   = document.getElementById('done-section');
+const resultTbody   = document.getElementById('result-tbody');
+
+// -------------------------------------------------------------------------
+// Helpers
+// -------------------------------------------------------------------------
+function getAudioContext() {
+  if (!audioCtx || audioCtx.state === 'closed') {
+    audioCtx = new AudioContext({ sampleRate: 48000 });
+  }
+  return audioCtx;
+}
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.style.display = 'block';
+}
+
+function hideError() {
+  errorBox.style.display = 'none';
+}
+
+async function fetchAudioBuffer(url) {
+  if (buffers[url]) return buffers[url];
+  const ctx = getAudioContext();
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Failed to fetch audio: ${url} (${resp.status})`);
+  const arrayBuf = await resp.arrayBuffer();
+  const audioBuf = await ctx.decodeAudioData(arrayBuf);
+  buffers[url] = audioBuf;
+  return audioBuf;
+}
+
+function playBuffer(ctx, audioBuf, startTime) {
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuf;
+  src.connect(ctx.destination);
+  src.start(startTime);
+  return src;
+}
+
+// -------------------------------------------------------------------------
+// Core 2AFC playback + response flow
+// -------------------------------------------------------------------------
+async function runTrial(trial) {
+  currentTrial = trial;
+  hideError();
+  btn1.disabled = true;
+  btn2.disabled = true;
+  responseEnabled = false;
+
+  // Update UI meta
+  const totalRev = trial.total_reversals;
+  const revDone  = trial.reversals_done ?? 0;
+  const trackNum = (trial.track ?? 0) + 1;
+  trackInfo.textContent = `Track ${trackNum}/2 — ${trial.track_name ?? ''} layer — Reversal ${revDone}/${totalRev}`;
+
+  // Update progress (rough: use reversal count across both tracks)
+  const pct = Math.min(100, Math.round((revDone / (totalRev * 2)) * 100));
+  progressFill.style.width = pct + '%';
+  progressLabel.textContent = `Trial ${trial.trial_num} — ${revDone} of ${totalRev * 2} reversals complete`;
+
+  // Threshold estimate
+  if (trial.threshold != null) {
+    thresholdDisp.innerHTML = `Estimated threshold: <span>${trial.threshold.toFixed(1)} dB SNR</span>`;
+  } else {
+    thresholdDisp.textContent = 'Estimated threshold: —';
+  }
+
+  // Pre-fetch both audio buffers
+  spinner.style.display = 'inline-block';
+  playStatus.textContent = 'Loading audio…';
+  try {
+    const [buf1, buf2] = await Promise.all([
+      fetchAudioBuffer(trial.interval_1_path),
+      fetchAudioBuffer(trial.interval_2_path),
+    ]);
+
+    // Resume AudioContext after user gesture (Chrome autoplay policy)
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    // Play interval 1
+    playStatus.textContent = '▶ Playing Interval 1…';
+    const t0 = ctx.currentTime + 0.1;
+    playBuffer(ctx, buf1, t0);
+    const dur1 = buf1.duration;
+
+    // Gap 500 ms, then interval 2
+    const t1 = t0 + dur1 + 0.5;
+    playBuffer(ctx, buf2, t1);
+    const dur2 = buf2.duration;
+    const endTime = t1 + dur2;
+
+    // Update label mid-play
+    setTimeout(() => {
+      if (playStatus.textContent.includes('Interval 1')) {
+        playStatus.textContent = '— Gap —';
+      }
+    }, (dur1) * 1000);
+    setTimeout(() => {
+      playStatus.textContent = '▶ Playing Interval 2…';
+    }, (dur1 + 0.5) * 1000);
+
+    // Enable buttons only after both intervals finish
+    const waitMs = (endTime - ctx.currentTime) * 1000;
+    spinner.style.display = 'none';
+    setTimeout(() => {
+      playStatus.textContent = 'Which interval was different?';
+      btn1.disabled = false;
+      btn2.disabled = false;
+      responseEnabled = true;
+    }, Math.max(waitMs, 100));
+
+  } catch (err) {
+    spinner.style.display = 'none';
+    showError('Audio error: ' + err.message);
+    playStatus.textContent = 'Error loading audio.';
+  }
+}
+
+// -------------------------------------------------------------------------
+// Server communication
+// -------------------------------------------------------------------------
+async function bootstrap() {
+  spinner.style.display = 'inline-block';
+  playStatus.textContent = 'Connecting to server…';
+  try {
+    const resp = await fetch('/trial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track: 0, response: -1, interval: -1 }),
+    });
+    if (!resp.ok) throw new Error(`Server error ${resp.status}: ${await resp.text()}`);
+    const trial = await resp.json();
+    spinner.style.display = 'none';
+    if (trial.done) {
+      showDone(trial.thresholds);
+    } else {
+      await runTrial(trial);
+    }
+  } catch (err) {
+    spinner.style.display = 'none';
+    showError('Could not start session: ' + err.message);
+    playStatus.textContent = 'Server connection failed.';
+  }
+}
+
+async function submitResponse(chosenInterval) {
+  if (!responseEnabled || !currentTrial) return;
+  responseEnabled = false;
+  btn1.disabled = true;
+  btn2.disabled = true;
+
+  spinner.style.display = 'inline-block';
+  playStatus.textContent = 'Submitting…';
+
+  const payload = {
+    track: currentTrial.track,
+    response: chosenInterval,
+    interval: currentTrial.treated_interval,
+  };
+
+  try {
+    const resp = await fetch('/trial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) throw new Error(`Server error ${resp.status}: ${await resp.text()}`);
+    const next = await resp.json();
+    spinner.style.display = 'none';
+
+    if (next.done) {
+      showDone(next.thresholds);
+    } else {
+      await runTrial(next);
+    }
+  } catch (err) {
+    spinner.style.display = 'none';
+    showError('Submit error: ' + err.message);
+    btn1.disabled = false;
+    btn2.disabled = false;
+    responseEnabled = true;
+  }
+}
+
+// -------------------------------------------------------------------------
+// Completion screen
+// -------------------------------------------------------------------------
+function showDone(thresholds) {
+  mainSection.style.display = 'none';
+  doneSection.style.display = 'block';
+
+  progressFill.style.width = '100%';
+
+  resultTbody.innerHTML = '';
+  const floor = -40.0;
+  for (const [name, thr] of Object.entries(thresholds ?? {})) {
+    if (thr == null) continue;
+    const op = Math.max(thr - 6, floor);
+    const warn = op <= floor ? ' ⚠' : '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${name}</td><td>${thr.toFixed(1)} dB</td><td>${op.toFixed(1)} dB${warn}</td>`;
+    resultTbody.appendChild(tr);
+  }
+}
+
+// -------------------------------------------------------------------------
+// Button listeners — must be triggered by user gesture for autoplay
+// -------------------------------------------------------------------------
+btn1.addEventListener('click', () => submitResponse(1));
+btn2.addEventListener('click', () => submitResponse(2));
+
+// -------------------------------------------------------------------------
+// Start
+// -------------------------------------------------------------------------
+bootstrap();
+</script>
+</body>
+</html>

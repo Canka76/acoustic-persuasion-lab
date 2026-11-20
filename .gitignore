@@ -13,8 +13,8 @@ build/
 venv/
 env/
 
-# uv
-uv.lock
+# uv — keep uv.lock committed (required for reproducible installs)
+# uv.lock  <-- intentionally not ignored
 
 # Corpus generated files (large binary artifacts)
 corpus/base_renders/
@@ -23,6 +23,7 @@ corpus/**/*.wav
 
 # Trained models
 *.joblib
+models/piper/
 
 # Analysis outputs
 analysis/results/

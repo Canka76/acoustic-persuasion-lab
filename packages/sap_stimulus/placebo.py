@@ -1,73 +1,73 @@
-"""Arm C placebo layer: energy/spectral-matched noise, frequency-jittered AM, no F0 pull."""
+"""Arm C (placebo) layer generator.
+
+Matches Arm B on:
+- added-layer RMS within ±0.5 dB
+- long-term spectral envelope within 2 dB/octave band (FIR shape-matched)
+- AM present but frequency-jittered (0.5–30 Hz, every 250 ms, phase-continuous)
+- F0 untouched (no pitch quantization)
+"""
 from __future__ import annotations
 
 import numpy as np
+from numpy.fft import rfft, irfft
 
-_JITTER_INTERVAL_S = 0.250  # resample f_mod every 250 ms
 
-
-def _fir_shape_noise(
-    noise: np.ndarray,
-    target_spectrum: np.ndarray,
-    sr: int,
-    n_taps: int = 255,
-) -> np.ndarray:
-    """Shape white noise to match *target_spectrum* via an FIR filter."""
-    from scipy.signal import firwin2, freqz, lfilter
-
-    n_fft = 2048
-    target_psd = np.abs(np.fft.rfft(target_spectrum, n=n_fft)) ** 2
-    target_psd /= target_psd.max() + 1e-12
-
-    freqs = np.linspace(0, 1, len(target_psd))  # normalised [0, 1]
-    gains = np.sqrt(target_psd)
-    gains /= gains.max() + 1e-12
-
-    # firwin2 needs endpoints at 0 and 1
-    b = firwin2(n_taps, freqs, gains)
-    return lfilter(b, [1.0], noise).astype(np.float32)
+def _shape_noise_to_layer(noise: np.ndarray, arm_b_layer: np.ndarray) -> np.ndarray:
+    """Shape white noise to match the long-term spectral envelope of arm_b_layer."""
+    n = len(arm_b_layer)
+    frame = 1024
+    hop = 512
+    B_sum = np.zeros(frame // 2 + 1)
+    N_sum = np.zeros(frame // 2 + 1)
+    count = 0
+    win = np.hanning(frame)
+    for i in range(0, min(n, len(noise)) - frame, hop):
+        B_sum += np.abs(rfft(arm_b_layer[i:i + frame] * win))
+        N_sum += np.abs(rfft(noise[i:i + frame] * win))
+        count += 1
+    if count == 0:
+        return noise
+    B_avg = B_sum / count + 1e-12
+    N_avg = N_sum / count + 1e-12
+    H = B_avg / N_avg
+    NOISE_SPEC = rfft(noise, n=n)
+    H_full = np.interp(np.arange(n // 2 + 1), np.linspace(0, n // 2, len(H)), H)
+    shaped = irfft(NOISE_SPEC * H_full, n=n)
+    return shaped[:len(noise)].astype(np.float32)
 
 
 def make_placebo_layer(
-    b_layer: np.ndarray,
+    arm_b_layer: np.ndarray,
     sr: int,
-    depth: float = 0.03,
-    rng: np.random.Generator | None = None,
+    seed: int = 1234,
+    am_depth: float = 0.03,
 ) -> np.ndarray:
-    """Return an Arm-C placebo layer matched to *b_layer* (from Arm B generator).
-
-    - RMS within 0.5 dB of b_layer.
-    - Long-term spectral envelope matched within 2 dB per octave band.
-    - AM present but f_mod uniformly resampled from 0.5–30 Hz every 250 ms (phase-continuous).
-    - No F0 modification.
     """
-    if rng is None:
-        rng = np.random.default_rng()
+    Return a placebo layer matching arm_b_layer RMS and spectrum,
+    with jittered AM instead of coherent AM.
+    """
+    rng = np.random.default_rng(seed)
+    noise = rng.standard_normal(len(arm_b_layer)).astype(np.float32)
 
-    n = len(b_layer)
-    # White noise base
-    noise = rng.standard_normal(n).astype(np.float32)
+    shaped = _shape_noise_to_layer(noise, arm_b_layer)
 
-    # Spectral shaping to match B layer envelope
-    shaped = _fir_shape_noise(noise, b_layer, sr)
+    # Match RMS to arm_b_layer
+    target_rms = float(np.sqrt(np.mean(arm_b_layer ** 2) + 1e-12))
+    shaped_rms = float(np.sqrt(np.mean(shaped ** 2) + 1e-12))
+    shaped *= target_rms / shaped_rms
 
-    # RMS match to B layer
-    b_rms = float(np.sqrt(np.mean(b_layer**2) + 1e-12))
-    s_rms = float(np.sqrt(np.mean(shaped**2) + 1e-12))
-    shaped *= b_rms / s_rms
-
-    # Jittered AM: resample f_mod every 250 ms with phase continuity
-    jitter_hop = int(_JITTER_INTERVAL_S * sr)
-    t = np.arange(n, dtype=np.float64) / sr
-    modulator = np.ones(n, dtype=np.float64)
+    # Apply jittered AM (phase-continuous across blocks)
+    block_samp = int(sr * 0.25)
+    rng2 = np.random.default_rng(seed + 1)
+    out = shaped.copy()
     phase = 0.0
-    for start in range(0, n, jitter_hop):
-        end = min(start + jitter_hop, n)
-        f_mod = float(rng.uniform(0.5, 30.0))
-        chunk_t = np.arange(end - start, dtype=np.float64) / sr
-        chunk_mod = 1.0 + depth * np.cos(2 * np.pi * f_mod * chunk_t + phase)
-        modulator[start:end] = chunk_mod
-        # Update phase for continuity
-        phase = (2 * np.pi * f_mod * (end - start) / sr + phase) % (2 * np.pi)
+    f_mod_hz = float(rng2.uniform(0.5, 30.0))
+    for start in range(0, len(out), block_samp):
+        end = min(start + block_samp, len(out))
+        t = np.arange(end - start) / sr
+        modulator = (1.0 + am_depth * np.cos(2.0 * np.pi * f_mod_hz * t + phase)).astype(np.float32)
+        out[start:end] *= modulator
+        phase = float((2.0 * np.pi * f_mod_hz * (end - start) / sr + phase) % (2.0 * np.pi))
+        f_mod_hz = float(rng2.uniform(0.5, 30.0))
 
-    return (shaped * modulator.astype(np.float32)).astype(np.float32)
+    return out.astype(np.float32)
