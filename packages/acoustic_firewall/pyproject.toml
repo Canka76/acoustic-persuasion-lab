@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acoustic-firewall"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "sap-core",
+  "scikit-learn",
+  "joblib",
+  "pystoi",
+]
+
+[project.scripts]
+acoustic-firewall = "acoustic_firewall.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["acoustic_firewall"]

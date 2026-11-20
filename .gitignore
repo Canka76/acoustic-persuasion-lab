@@ -1,0 +1,36 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+uv.lock
+
+# Corpus generated files (large binary artifacts)
+corpus/base_renders/
+corpus/stimuli/
+corpus/**/*.wav
+
+# Trained models
+*.joblib
+
+# Analysis outputs
+analysis/results/
+
+# Study database
+study.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

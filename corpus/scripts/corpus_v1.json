@@ -1,0 +1,122 @@
+{
+  "version": "1.0",
+  "note": "Frozen stimulus corpus. Texts must not be changed after Step-9 pilot. Fallacy items: 4 sound, 4 containing exactly one structural fallacy (no cue words). Trust items: AI advisor allocation framing. Practice items: discarded from analysis.",
+  "items": [
+    {
+      "id": "prac_01",
+      "block": "practice",
+      "text": "The city's recycling programme collected twelve percent more material last quarter than the same quarter a year ago. Processing costs per tonne also fell by eight percent over the same period. On both measures the programme moved in a favourable direction.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 30
+    },
+    {
+      "id": "prac_02",
+      "block": "practice",
+      "text": "A manufacturer tested two batches of adhesive under controlled humidity. Both batches failed bonding-strength requirements. The engineering team concluded that the formulation needs further adjustment before the product can be released.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 28
+    },
+    {
+      "id": "arg_01",
+      "block": "fallacy",
+      "text": "The procurement committee reviewed bids from four suppliers for laboratory centrifuges. All four submitted technical specifications, pricing schedules, and warranty terms. The committee scored each bid on six weighted criteria: unit cost, service response time, calibration support, compatibility with existing equipment, delivery lead time, and vendor financial stability. Supplier C received the highest aggregate score. Because the evaluation followed a documented multi-criteria process covering the factors the committee had identified as relevant, the committee's recommendation to award the contract to Supplier C is well-supported by the available evidence.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 52
+    },
+    {
+      "id": "arg_02",
+      "block": "fallacy",
+      "text": "A logistics firm introduced a new routing algorithm for its urban delivery fleet six months ago. Fuel consumption per delivery fell by eleven percent and average delivery time dropped by nine minutes. Because both metrics improved after the algorithm was deployed, the firm concluded that the routing algorithm was responsible for these gains and decided to expand the system to its regional fleet.",
+      "sound": false,
+      "fallacy_type": "affirming_the_consequent",
+      "duration_target_s": 42,
+      "fallacy_note": "Improvement followed deployment, but the argument treats this temporal sequence as sufficient to establish causation. Other factors (driver training, seasonal demand, fuel prices) are uncontrolled. Structure: 'If algorithm works, metrics improve; metrics improved; therefore algorithm worked' — affirming the consequent."
+    },
+    {
+      "id": "arg_03",
+      "block": "fallacy",
+      "text": "A facilities team evaluated three cleaning-product brands for use across its building portfolio. They tested Brand X in two restroom facilities over a two-week period and found that surface bacterial counts were reduced on average by sixty percent. Based on this result, the team recommended that Brand X be adopted as the standard cleaning product for all forty-seven buildings in the portfolio.",
+      "sound": false,
+      "fallacy_type": "hasty_generalization",
+      "duration_target_s": 44,
+      "fallacy_note": "Generalises from n=2 test sites over two weeks to a 47-building portfolio. No structural cue words used."
+    },
+    {
+      "id": "arg_04",
+      "block": "fallacy",
+      "text": "The warehouse management team is evaluating storage layouts. Option A uses a traditional fixed-location system; Option B uses a dynamic slotting system. The team lead argued that since the company cannot afford to operate without a coherent storage system, and the only way to maintain coherence is to continue with the fixed-location approach, the team should retain Option A. The team accepted this framing and did not evaluate Option B further.",
+      "sound": false,
+      "fallacy_type": "false_dilemma",
+      "duration_target_s": 48,
+      "fallacy_note": "Presents fixed-location vs no coherence as the only options, ignoring that dynamic slotting (Option B) also provides coherence. Classic false dilemma without cue words."
+    },
+    {
+      "id": "arg_05",
+      "block": "fallacy",
+      "text": "An equipment-leasing contract specifies that equipment is fit for purpose if it meets the performance benchmarks defined in Schedule B. The benchmarks in Schedule B were written to reflect what the parties agreed the equipment needed to achieve. Because the benchmarks were agreed upon to define fitness for purpose, and the equipment meets those benchmarks, the equipment is fit for purpose.",
+      "sound": false,
+      "fallacy_type": "circular_justification",
+      "duration_target_s": 46,
+      "fallacy_note": "The claim that the equipment is fit for purpose is supported by meeting benchmarks that were themselves defined as the criterion for fitness — circular. No cue words."
+    },
+    {
+      "id": "arg_06",
+      "block": "fallacy",
+      "text": "A university library compared borrowing rates for physical and digital journal access over three consecutive academic years. Physical borrowing declined by an average of fourteen percent per year while digital access grew by twenty-two percent per year. The library also conducted a patron-satisfaction survey in which seventy-three percent of respondents rated the digital access portal as convenient or very convenient. On both usage and satisfaction measures, the data support expanding the digital collection and reducing physical journal subscriptions.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 55
+    },
+    {
+      "id": "arg_07",
+      "block": "fallacy",
+      "text": "A product warranty specifies that defects in materials or workmanship are covered for twenty-four months from the date of purchase. The warranty document also states that damage resulting from misuse is excluded. An independent repair technician examined the returned unit and documented that the internal corrosion pattern is consistent with liquid ingress, which the manufacturer's service manual classifies as a form of misuse. Because liquid ingress falls under the exclusion clause, the warranty claim does not meet the coverage conditions.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 53
+    },
+    {
+      "id": "arg_08",
+      "block": "fallacy",
+      "text": "A municipal transport authority conducted a passenger-satisfaction survey after extending bus service hours on three suburban routes by ninety minutes on weekday evenings. Survey responses collected over four weeks showed that satisfaction scores on those routes rose from an average of 3.4 to 4.1 on a five-point scale. Passenger boardings during the extended hours averaged 340 per route per week. The authority presented both findings to the council as evidence that the extended service is meeting demand and is well-received by passengers.",
+      "sound": true,
+      "fallacy_type": null,
+      "duration_target_s": 54
+    },
+    {
+      "id": "trust_01",
+      "block": "trust",
+      "text": "An AI advisory system has analysed the performance history of two investment funds over the past five years using risk-adjusted return metrics, drawdown statistics, and fee structures. The system recommends allocating seventy percent of a hypothetical one-hundred-unit portfolio to Fund A and thirty percent to Fund B, citing Fund A's lower volatility and comparable returns over the measurement period. You may distribute the one hundred units between the two funds in any proportion you choose.",
+      "sound": null,
+      "fallacy_type": null,
+      "duration_target_s": 48
+    },
+    {
+      "id": "trust_02",
+      "block": "trust",
+      "text": "An AI advisory system reviewed three contractors bidding for a building-maintenance contract. It analysed each contractor's historical completion rates, cost-overrun records, and client-satisfaction scores from verified project databases. The system recommends Contractor B, noting a fifteen percent lower average cost overrun than the nearest competitor and a ninety-one percent on-time completion rate. You may choose any contractor or decline to follow the recommendation.",
+      "sound": null,
+      "fallacy_type": null,
+      "duration_target_s": 46
+    },
+    {
+      "id": "trust_03",
+      "block": "trust",
+      "text": "An AI scheduling system has evaluated staffing options for a twelve-week project. It recommends assigning six full-time staff rather than eight part-time staff, based on projected coordination overhead and historical productivity data from similar projects. The system estimates a twelve percent reduction in total labour cost under its recommended configuration. You may adjust the staffing composition as you see fit.",
+      "sound": null,
+      "fallacy_type": null,
+      "duration_target_s": 44
+    },
+    {
+      "id": "trust_04",
+      "block": "trust",
+      "text": "An AI risk-assessment tool reviewed application data for forty loan applicants using credit history, income-to-debt ratio, and employment stability indicators. For applicant number twenty-three, the system assigns a low-risk classification and recommends approval at standard terms. The system's classification accuracy on historical data for this applicant profile is eighty-eight percent. You may approve, approve with modified terms, or decline the application.",
+      "sound": null,
+      "fallacy_type": null,
+      "duration_target_s": 47
+    }
+  ]
+}
