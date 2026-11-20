@@ -20,3 +20,6 @@ f5 = ["f5-tts"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["sap_stimulus"]
+
+[tool.uv.sources]
+sap-core = { workspace = true }
