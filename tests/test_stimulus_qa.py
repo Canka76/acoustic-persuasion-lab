@@ -303,35 +303,43 @@ def test_am_verification(item_id: str) -> None:
         pdb = 20.0 * np.log10(spec + 1e-12)
         return freqs, pdb
 
+    wav_a, sr_a = _load_wav("A", item_id)
     freqs_b, pdb_b = _subfund_am_spectrum(wav_b, sr_b)
+    freqs_a, pdb_a = _subfund_am_spectrum(wav_a, sr_a)
     band = (freqs_b >= 1.0) & (freqs_b <= 30.0)
     if not np.any(band):
         pytest.skip(f"item {item_id}: audio too short for delivered-stimulus AM check")
 
-    peak_hz_b = float(freqs_b[band][np.argmax(pdb_b[band])])
-    prom_b = _local_median_prominence(freqs_b, pdb_b, peak_hz_b)
-    # 10 Hz prominence specifically (may not be the dominant peak)
-    prom_10hz = _local_median_prominence(freqs_b, pdb_b, AM_FREQ_HZ, band_hz=0.5)
+    # 10 Hz prominence in B and in A (noise floor — natural band structure)
+    prom_b_10hz = _local_median_prominence(freqs_b, pdb_b, AM_FREQ_HZ, band_hz=0.5)
+    prom_a_10hz = _local_median_prominence(freqs_a, pdb_a, AM_FREQ_HZ, band_hz=0.5)
+    margin = prom_b_10hz - prom_a_10hz  # B above A's natural floor at 10 Hz
 
-    # This is a dose-finding assertion: if 10 Hz is not detectable at −31 dB SNR,
-    # the threshold pilot (Step 4) will catch this and raise the operating SNR.
-    # A failure here is a finding, not a code bug — record it and fail so the
-    # threshold pilot gate MUST be run before proceeding to the main study.
-    assert prom_10hz >= 6.0, (
-        f"item {item_id}: 10 Hz AM not detectable in delivered B mix (55-75 Hz band), "
-        f"prominence {prom_10hz:.2f} dB < 6 dB (dominant peak: {peak_hz_b:.3f} Hz "
-        f"@ {prom_b:.2f} dB). "
-        f"FINDING: effective dose at −31 dB SNR is insufficient. "
-        f"Run threshold pilot (Step 4) to set operating SNR where 10 Hz is recoverable, "
-        f"then re-render at that SNR before continuing."
+    # Arm A has ~6-8 dB natural structure in this band. A flat 6 dB threshold on B
+    # alone has no discriminative power. Assert B exceeds A's 10 Hz floor by ≥ 3 dB,
+    # and that B's absolute prominence is ≥ 6 dB.
+    # Either assertion failing is a dose finding — run threshold pilot (Step 4).
+    assert prom_b_10hz >= 6.0, (
+        f"item {item_id}: B 10 Hz prominence {prom_b_10hz:.2f} dB < 6 dB absolute. "
+        f"A floor: {prom_a_10hz:.2f} dB, margin B-A: {margin:.2f} dB. "
+        f"FINDING: 10 Hz AM not detectable above band noise at −31 dB SNR. "
+        f"Run threshold pilot (Step 4) and re-render at the measured operating SNR."
+    )
+    assert margin >= 3.0, (
+        f"item {item_id}: B 10 Hz prominence {prom_b_10hz:.2f} dB exceeds A floor "
+        f"{prom_a_10hz:.2f} dB by only {margin:.2f} dB (need ≥ 3 dB margin). "
+        f"FINDING: 10 Hz AM is within band baseline variance — not discriminative. "
+        f"Run threshold pilot (Step 4) and re-render at the measured operating SNR."
     )
 
-    # Arm C: 10 Hz must NOT be coherently present in the placebo
+    # Arm C: 10 Hz must NOT rise above A's natural floor at 10 Hz
     freqs_c, pdb_c = _subfund_am_spectrum(wav_c, sr_c)
-    prom_c_at_10 = _local_median_prominence(freqs_c, pdb_c, AM_FREQ_HZ, band_hz=0.5)
-    assert prom_c_at_10 < 6.0, (
-        f"item {item_id} delivered C (55-75 Hz band): 10 Hz prominence "
-        f"{prom_c_at_10:.2f} dB ≥ 6 dB — C placebo must not have coherent 10 Hz AM"
+    prom_c_10hz = _local_median_prominence(freqs_c, pdb_c, AM_FREQ_HZ, band_hz=0.5)
+    margin_c = prom_c_10hz - prom_a_10hz
+    assert margin_c < 3.0, (
+        f"item {item_id} C: 10 Hz prominence {prom_c_10hz:.2f} dB exceeds A floor "
+        f"{prom_a_10hz:.2f} dB by {margin_c:.2f} dB ≥ 3 dB — "
+        f"C placebo must not have discriminative 10 Hz modulation"
     )
 
 # ---------------------------------------------------------------------------
