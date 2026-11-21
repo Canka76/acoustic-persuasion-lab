@@ -135,27 +135,25 @@ All |Δ¢| figures use `pull_f0`'s internal pre/post F0 arrays (zero estimator n
 | p90 \|Δ¢\| | **58.2 ¢** | ~58 ¢ = ~0.58 semitones |
 | Max \|Δ¢\| | 60.0 ¢ (clamp ceiling) | — |
 
-**Literature note (unsourced working assumptions — to be replaced by threshold pilot):**
-The reference JND values "~25–50 ¢ naive" and "~5–10 ¢ trained" in the prior
-draft were unsourced. The empirical literature on F0 discrimination in continuous
-speech is more nuanced:
-- 't Hart (1981) reports a JND for intonation *glides* in Dutch speech of roughly
-  1.5–3 semitones (150–300 ¢) under natural listening conditions — far coarser
-  than the 27 ¢ median here, suggesting the F0 pull may be sub-perceptual for
-  sentence-level prosody judgments.
-- Discrimination thresholds for *static* F0 differences are ~3–8 ¢ for pure tones
-  (Flanagan & Saslow 1958) but ~25–75 ¢ for speech (Ritsma & Engel 1964;
-  Nabelek et al. 1970) — context-dependent and speaker-dependent.
-- **Conclusion:** No single published JND value applies cleanly to this stimulus
-  (continuous TTS speech with frame-by-frame pitch quantization toward chord tones).
-  The threshold pilot (Step 4, 2AFC staircase on rendered B vs. A stimuli) will
-  measure the actual detection threshold for *this pipeline*, and that measured
-  value will replace these working assumptions before the main study.
+**Working assumptions (no verified source — threshold pilot will supersede):**
+The 27.4 ¢ median shift and 58.2 ¢ p90 are compared below against ranges from
+the psychoacoustics literature, but the specific values cited have not been
+verified against the original papers and must not be treated as established facts.
+Until the threshold pilot (Step 4) produces an empirical detection threshold for
+*this pipeline* (TTS speech, frame-by-frame pitch quantization toward chord tones,
+headphone delivery), the sub-perceptual claim for the F0 manipulation is an
+**open hypothesis**.
 
-**Assessment:** The sub-perceptual claim for F0 is **not established** prior to
-the threshold pilot. H3 is an open hypothesis. The 27.4 ¢ median shift is within
-the plausible sub-perceptual range for natural-speech listeners ('t Hart 1981)
-but cannot be confirmed without empirical threshold data on this pipeline.
+For reference only (unverified working ranges):
+- F0 discrimination in continuous speech is generally coarser than in pure tones;
+  glide-detection thresholds in natural speech contexts are typically reported in
+  the range of tens to hundreds of cents, not single-digit cents.
+- The 27.4 ¢ median shift *may* be sub-perceptual for naive listeners attending
+  to content, but this is not confirmed for TTS voices or chord-tone quantization.
+
+**Assessment:** Sub-perceptual claim for F0 is **not established**. H3 is open.
+The threshold pilot will measure the actual detection threshold and replace this
+section with an empirical value before the main study runs.
 
 ### AM manipulation (SNR = −31 dB, 10 Hz, depth = 3%)
 
