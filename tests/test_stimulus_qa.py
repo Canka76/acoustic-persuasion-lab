@@ -332,25 +332,55 @@ def test_am_verification(item_id: str) -> None:
         f"Run threshold pilot (Step 4) and re-render at the measured operating SNR."
     )
 
-    # Arm C: the LAYER (actual added signal) must have < half the 10 Hz prominence
-    # of the B layer.  Comparing full C-mix to A-mix false-positives on items whose
-    # speech has natural ~10 Hz syllabic amplitude variation (e.g. arg_06, 4.17 dB
-    # natural A floor → C-mix margin 3.93 dB that is not from deliberate AM).
-    # The layer sidecar is the unambiguous signal: if it has less 10 Hz prominence
-    # than B's layer, the placebo is clean — regardless of speech content.
+
+
+# ---------------------------------------------------------------------------
+# 6b. Placebo 10 Hz — C layer must have less 10 Hz prominence than B layer
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("item_id", ITEM_IDS)
+def test_placebo_no_am(item_id: str) -> None:
+    """C layer.wav 10 Hz prominence must be strictly below B layer.wav's.
+
+    Runs independently for all 10 items so the B dose-finding failures in
+    test_am_verification cannot mask C failures via pytest short-circuit.
+
+    The full-mix comparison (C_mix − A_mix) false-positives on items whose
+    speech has natural ~10 Hz syllabic rhythm (e.g. arg_06: 4.17 dB natural
+    floor in A → C-mix apparent margin 3.93 dB, not from deliberate AM).
+    The layer sidecars are the unambiguous signal.
+    """
+    import soundfile as sf
+    from scipy.signal import butter, sosfiltfilt
+    from scipy.signal import hilbert as sig_hilbert
+
     b_layer_path = STIMULI_DIR / "B" / f"{item_id}.layer.wav"
     c_layer_path = STIMULI_DIR / "C" / f"{item_id}.layer.wav"
-    if b_layer_path.exists() and c_layer_path.exists():
-        import soundfile as sf
-        b_layer, _ = sf.read(b_layer_path, dtype="float32")
-        c_layer, _ = sf.read(c_layer_path, dtype="float32")
-        prom_b_layer = _local_median_prominence(*_subfund_am_spectrum(b_layer, sr_b), AM_FREQ_HZ, band_hz=0.5)
-        prom_c_layer = _local_median_prominence(*_subfund_am_spectrum(c_layer, sr_c), AM_FREQ_HZ, band_hz=0.5)
-        assert prom_c_layer < prom_b_layer, (
-            f"item {item_id} C layer 10 Hz prominence {prom_c_layer:.2f} dB ≥ "
-            f"B layer {prom_b_layer:.2f} dB — C placebo has unexpected coherent "
-            f"10 Hz AM in its added signal"
-        )
+    assert b_layer_path.exists(), f"B layer sidecar missing: {b_layer_path}"
+    assert c_layer_path.exists(), f"C layer sidecar missing: {c_layer_path}"
+
+    b_layer, sr_b = sf.read(b_layer_path, dtype="float32")
+    c_layer, sr_c = sf.read(c_layer_path, dtype="float32")
+    b_layer = b_layer.astype(np.float32)
+    c_layer = c_layer.astype(np.float32)
+
+    def _subfund_am_spectrum(wav: np.ndarray, sr: int):
+        sos = butter(4, [55.0, 75.0], btype="bandpass", fs=sr, output="sos")
+        filtered = sosfiltfilt(sos, wav.astype(np.float64))
+        win = min(len(filtered), 16 * sr)
+        env = np.abs(sig_hilbert(filtered[:win]))
+        env -= env.mean()
+        spec = np.abs(np.fft.rfft(env))
+        freqs = np.fft.rfftfreq(win, 1.0 / sr)
+        pdb = 20.0 * np.log10(spec + 1e-12)
+        return freqs, pdb
+
+    prom_b = _local_median_prominence(*_subfund_am_spectrum(b_layer, sr_b), AM_FREQ_HZ, band_hz=0.5)
+    prom_c = _local_median_prominence(*_subfund_am_spectrum(c_layer, sr_c), AM_FREQ_HZ, band_hz=0.5)
+    assert prom_c < prom_b, (
+        f"item {item_id}: C layer 10 Hz prominence {prom_c:.2f} dB ≥ "
+        f"B layer {prom_b:.2f} dB — placebo has unexpected coherent 10 Hz AM"
+    )
 
 # ---------------------------------------------------------------------------
 # 7. F0 pull verification — B pitch-class histogram χ² vs A: p<.001, 0<Δ≤60 cents
