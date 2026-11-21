@@ -253,65 +253,86 @@ def _local_median_prominence(freqs: np.ndarray, power_db: np.ndarray, peak_hz: f
 
 
 @pytest.mark.parametrize("item_id", ITEM_IDS)
-def test_am_verification(item_id: str) -> None:
-    """B layer sidecar modulation spectrum: dominant peak at 10±0.2 Hz, prominence ≥6 dB.
-    C residual modulation spectrum: no fixed-frequency peak ≥6 dB in 1–30 Hz.
-
-    The AM is applied to the layer (at −31 dB SNR), so it is not detectable in the
-    full-mix B envelope. We check corpus/stimuli/B/<id>.layer.wav (the actual added
-    layer signal saved as a sidecar during render). If the sidecar is absent (pre-fix
-    renders), regenerate from render or skip.
+def test_am_unit(item_id: str) -> None:
+    """Unit test: layer_am.wav sidecar must have dominant 10 Hz ±0.2 Hz peak ≥6 dB.
+    Tests amplitude_modulate() output in isolation (not the delivered mix).
     """
-    # Use layer_am.wav (pre-ducking): duck_to_snr applies speech-envelope gain which
-    # superimposes 2-5 Hz syllabic modulation on the layer, masking the 10 Hz peak.
-    # The pre-ducking layer_am is a pure subharmonic sine with clean 10 Hz AM.
     layer_path = STIMULI_DIR / "B" / f"{item_id}.layer_am.wav"
     if not layer_path.exists():
-        pytest.skip(
-            f"item {item_id}: layer_am sidecar not found at {layer_path}. "
-            "Re-render with current render.py to generate .layer_am.wav sidecars."
-        )
-
+        pytest.skip(f"item {item_id}: layer_am sidecar missing — re-render")
     import soundfile as sf
-    layer_wav, sr_b = sf.read(str(layer_path), dtype="float32", always_2d=False)
-    if layer_wav.ndim > 1:
-        layer_wav = layer_wav.mean(axis=1)
+    layer_wav, sr = sf.read(str(layer_path), dtype="float32", always_2d=False)
+    freqs, pdb = _modulation_spectrum(layer_wav, sr)
+    if len(freqs) == 0:
+        pytest.skip(f"item {item_id}: layer_am too short")
+    band = (freqs >= 1.0) & (freqs <= 30.0)
+    peak_hz = float(freqs[band][np.argmax(pdb[band])])
+    prom = _local_median_prominence(freqs, pdb, peak_hz)
+    assert abs(peak_hz - AM_FREQ_HZ) <= 0.2, f"{item_id} layer_am peak at {peak_hz:.3f} Hz"
+    assert prom >= 6.0, f"{item_id} layer_am prominence {prom:.1f} dB < 6 dB"
 
-    freqs_b, pdb_b = _modulation_spectrum(layer_wav, sr_b)
-    if len(freqs_b) == 0:
-        pytest.skip(f"item {item_id}: layer too short for AM verification")
 
-    band_mask = (freqs_b >= 1.0) & (freqs_b <= 30.0)
-    if not np.any(band_mask):
-        pytest.skip(f"item {item_id}: frequency resolution too low for AM check")
+@pytest.mark.parametrize("item_id", ITEM_IDS)
+def test_am_verification(item_id: str) -> None:
+    """Delivered-stimulus check: 10 Hz AM must be detectable in arm B's sub-F0 band.
 
-    # Layer must have dominant modulation peak at 10 Hz ±0.2 Hz with ≥6 dB prominence
-    peak_idx = int(np.argmax(pdb_b[band_mask]))
-    peak_freq_b = float(freqs_b[band_mask][peak_idx])
-    prominence_b = _local_median_prominence(freqs_b, pdb_b, peak_freq_b)
+    The subharmonic drone sits at 55–75 Hz (C2 = 65.4 Hz), below the voiced F0 of
+    the Ryan TTS voice (~100–120 Hz). Speech energy in that sub-F0 band is low, so
+    the layer dominates there. We bandpass arm B at 55–75 Hz, compute the Hilbert
+    envelope of that band, and assert a 10 Hz ±0.2 Hz peak with ≥6 dB prominence.
 
-    assert abs(peak_freq_b - AM_FREQ_HZ) <= 0.2, (
-        f"item {item_id} B layer: dominant mod peak at {peak_freq_b:.3f} Hz, "
-        f"expected {AM_FREQ_HZ} ±0.2 Hz"
-    )
-    assert prominence_b >= 6.0, (
-        f"item {item_id} B layer: mod peak prominence {prominence_b:.2f} dB < 6 dB"
-    )
+    If this fails at −31 dB SNR it is a finding about effective dose: the AM may
+    not be recoverable from the delivered mix even by a narrowband approach, which
+    implies the detector (Steps 5–6) cannot work at this SNR level either.
+    """
+    from scipy.signal import butter, sosfiltfilt
+    from scipy.signal import hilbert as sig_hilbert
 
-    # C residual: check no coherent fixed-frequency peak ≥6 dB in 1–30 Hz
-    wav_a, sr_a = _load_wav("A", item_id)
+    wav_b, sr_b = _load_wav("B", item_id)
     wav_c, sr_c = _load_wav("C", item_id)
-    n = min(len(wav_a), len(wav_c))
-    residual_c = (wav_c[:n].astype(np.float64) - wav_a[:n].astype(np.float64)).astype(np.float32)
-    freqs_c, pdb_c = _modulation_spectrum(residual_c, sr_c)
-    if len(freqs_c) == 0:
-        return
-    for hz in np.arange(1.0, 30.0, 0.5):
-        prom = _local_median_prominence(freqs_c, pdb_c, hz, band_hz=1.0)
-        assert prom < 6.0, (
-            f"item {item_id} C residual: unexpected coherent peak at {hz:.1f} Hz "
-            f"prominence {prom:.2f} dB ≥ 6 dB"
-        )
+
+    def _subfund_am_spectrum(wav: np.ndarray, sr: int):
+        """Bandpass 55–75 Hz with SOS (numerically stable), Hilbert envelope, rfft."""
+        sos = butter(4, [55.0, 75.0], btype="bandpass", fs=sr, output="sos")
+        filtered = sosfiltfilt(sos, wav.astype(np.float64))
+        win = min(len(filtered), 16 * sr)
+        env = np.abs(sig_hilbert(filtered[:win]))
+        env -= env.mean()
+        spec = np.abs(np.fft.rfft(env))
+        freqs = np.fft.rfftfreq(win, 1.0 / sr)
+        pdb = 20.0 * np.log10(spec + 1e-12)
+        return freqs, pdb
+
+    freqs_b, pdb_b = _subfund_am_spectrum(wav_b, sr_b)
+    band = (freqs_b >= 1.0) & (freqs_b <= 30.0)
+    if not np.any(band):
+        pytest.skip(f"item {item_id}: audio too short for delivered-stimulus AM check")
+
+    peak_hz_b = float(freqs_b[band][np.argmax(pdb_b[band])])
+    prom_b = _local_median_prominence(freqs_b, pdb_b, peak_hz_b)
+    # 10 Hz prominence specifically (may not be the dominant peak)
+    prom_10hz = _local_median_prominence(freqs_b, pdb_b, AM_FREQ_HZ, band_hz=0.5)
+
+    # This is a dose-finding assertion: if 10 Hz is not detectable at −31 dB SNR,
+    # the threshold pilot (Step 4) will catch this and raise the operating SNR.
+    # A failure here is a finding, not a code bug — record it and fail so the
+    # threshold pilot gate MUST be run before proceeding to the main study.
+    assert prom_10hz >= 6.0, (
+        f"item {item_id}: 10 Hz AM not detectable in delivered B mix (55-75 Hz band), "
+        f"prominence {prom_10hz:.2f} dB < 6 dB (dominant peak: {peak_hz_b:.3f} Hz "
+        f"@ {prom_b:.2f} dB). "
+        f"FINDING: effective dose at −31 dB SNR is insufficient. "
+        f"Run threshold pilot (Step 4) to set operating SNR where 10 Hz is recoverable, "
+        f"then re-render at that SNR before continuing."
+    )
+
+    # Arm C: 10 Hz must NOT be coherently present in the placebo
+    freqs_c, pdb_c = _subfund_am_spectrum(wav_c, sr_c)
+    prom_c_at_10 = _local_median_prominence(freqs_c, pdb_c, AM_FREQ_HZ, band_hz=0.5)
+    assert prom_c_at_10 < 6.0, (
+        f"item {item_id} delivered C (55-75 Hz band): 10 Hz prominence "
+        f"{prom_c_at_10:.2f} dB ≥ 6 dB — C placebo must not have coherent 10 Hz AM"
+    )
 
 # ---------------------------------------------------------------------------
 # 7. F0 pull verification — B pitch-class histogram χ² vs A: p<.001, 0<Δ≤60 cents
