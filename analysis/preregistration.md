@@ -121,5 +121,45 @@ Before main run:
 Any deviation from this pre-registration must be documented in `analysis/deviations.md` with date, rationale, and direction of expected bias. Undocumented deviations make the confirmatory claims invalid; affected analyses become exploratory.
 
 ---
+## 10. Dose-finding audit (pre-pilot, ground-truth measurements)
+
+The following physical measurements were made before any participants were run,
+using the actual rendered corpus (strength=0.350, SNR=−31 dB).
+All |Δ¢| figures use `pull_f0`'s internal pre/post F0 arrays (zero estimator noise).
+
+### F0 manipulation magnitude (strength = 0.350)
+
+| Statistic | Value | Reference |
+|---|---|---|
+| Median \|Δ¢\| across all voiced frames | **27.4 ¢** | Naive-listener JND ~25–50 ¢ |
+| p90 \|Δ¢\| | **58.2 ¢** | Trained-listener JND ~5–10 ¢ |
+| Max \|Δ¢\| | 60.0 ¢ (clamp ceiling) | — |
+
+**Assessment:** The median shift (27.4 ¢) is at the lower boundary of the
+naive-listener JND range. The p90 (58.2 ¢) is audible to trained listeners.
+The clamp bites on ~90% of frames. The sub-perceptual claim for F0 is
+**not established** prior to the threshold pilot — it is a hypothesis, not a
+confirmed fact. H3 must be treated as open until threshold-pilot data are in hand.
+
+### AM manipulation (SNR = −31 dB, 10 Hz, depth = 3%)
+
+Physical dose-response sweep (B−A margin in 55–75 Hz subharmonic band):
+
+| SNR | Mean B−A margin | Items ≥ 3 dB gate |
+|---:|---:|---:|
+| −31 dB (operating) | +0.14 dB | 1/10 |
+| −25 dB | +0.36 dB | 1/10 |
+| −20 dB | +2.24 dB | 3/10 |
+| −15 dB | +4.74 dB | 6/10 |
+| −10 dB | +6.48 dB | 7/10 |
+
+**Assessment:** At the operating SNR (−31 dB), the 10 Hz modulation is
+indistinguishable from baseline noise in a narrowband analysis. The
+threshold pilot must establish the actual psychoacoustic modulation detection
+threshold before the AM dose can be confirmed as sub-perceptual-yet-present.
+If the detection threshold is better (more sensitive) than −15 dB SNR,
+"sub-perceptual" and "physically detectable in the delivered mix" are
+mutually exclusive in this pipeline — a finding that narrows or refutes H1/H2.
+
 
 *End of pre-registration. SHA-256 of this file at lock time: [computed at commit]*
