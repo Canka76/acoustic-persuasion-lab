@@ -617,7 +617,10 @@ async function runBlock(opts) {
         document.getElementById(statusId).textContent = 'Please respond:';
         document.getElementById(responseId).style.display = 'block';
 
-        // Enable one-shot replay
+        // Enable one-shot replay — RT anchor stays on FIRST play (audioOffsetPerfNow
+        // must not be reassigned, otherwise submit during replay → negative rt → rt_invalid,
+        // corrupting H5 log-RT; replay offset is logged separately as a covariate).
+        const firstPlayOffset = audioOffsetPerfNow;  // frozen reference for RT
         if (replayBtnEl && replayBtnEl.dataset.used === '0') {
           replayBtnEl.disabled = false;
           replayBtnEl.onclick = () => {
@@ -627,20 +630,24 @@ async function runBlock(opts) {
             replayBtnEl.textContent = '(replayed)';
             if (animFrame) cancelAnimationFrame(animFrame);
             if (audioBarEl) audioBarEl.value = 0;
-            const r = scheduleBuffer(buffer);
-            audioOffsetPerfNow = r.audioOffsetPerfNow;
-            // Re-animate progress
+            const replayResult = scheduleBuffer(buffer);
+            // DO NOT reassign audioOffsetPerfNow — keep firstPlayOffset for RT
+            logEvent('replay', {
+              item_id: itemId,
+              trial_id: trialId,
+              first_play_offset: firstPlayOffset,
+              replay_offset: replayResult.audioOffsetPerfNow,
+            });
+            // Re-animate progress bar for replay
             if (audioBarEl) {
               const rStart = performance.now();
-              function animReplay() {
+              (function animReplay() {
                 const e2 = performance.now() - rStart;
                 audioBarEl.value = Math.min(100, (e2 / durationMs) * 100);
                 if (e2 < durationMs) requestAnimationFrame(animReplay);
                 else audioBarEl.value = 100;
-              }
-              requestAnimationFrame(animReplay);
+              })();
             }
-            logEvent('replay', { item_id: itemId, trial_id: trialId });
           };
         }
 
