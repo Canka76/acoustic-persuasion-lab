@@ -83,10 +83,15 @@
 <!-- ===== 4. PRACTICE ===== -->
 <section id="sec-practice">
   <h1>Practice Trials</h1>
-  <p>These two practice items will not count toward the study. Listen carefully to each clip, then answer.</p>
+  <p>These two practice items will not count toward the study. Listen carefully to each clip, then answer.<br>
+     <small style="color:#666">Note: audio has been processed and may sound slightly different from normal speech — this is expected.</small></p>
   <div class="trial-panel" id="practice-panel">
     <div class="progress" id="practice-progress"></div>
     <p id="practice-status">Loading audio…</p>
+    <div id="practice-audio-controls" style="display:none;margin-bottom:12px">
+      <progress id="practice-audio-progress" value="0" max="100" style="width:100%;height:8px"></progress>
+      <button id="practice-replay-btn" style="margin-top:6px;font-size:0.85em" disabled>↺ Replay once</button>
+    </div>
     <div id="practice-response" style="display:none">
       <div class="btn-row">
         <button class="answer-btn" data-val="valid" disabled>Sounds logically valid</button>
@@ -107,6 +112,10 @@
   <div class="trial-panel" id="fallacy-panel">
     <div class="progress" id="fallacy-progress"></div>
     <p id="fallacy-status">Loading audio…</p>
+    <div id="fallacy-audio-controls" style="display:none;margin-bottom:12px">
+      <progress id="fallacy-audio-progress" value="0" max="100" style="width:100%;height:8px"></progress>
+      <button id="fallacy-replay-btn" style="margin-top:6px;font-size:0.85em" disabled>↺ Replay once</button>
+    </div>
     <div id="fallacy-response" style="display:none">
       <div class="btn-row">
         <button class="answer-btn" data-val="valid" disabled>Sounds logically valid</button>
@@ -127,6 +136,10 @@
   <div class="trial-panel" id="trust-panel">
     <div class="progress" id="trust-progress"></div>
     <p id="trust-status">Loading audio…</p>
+    <div id="trust-audio-controls" style="display:none;margin-bottom:12px">
+      <progress id="trust-audio-progress" value="0" max="100" style="width:100%;height:8px"></progress>
+      <button id="trust-replay-btn" style="margin-top:6px;font-size:0.85em" disabled>↺ Replay once</button>
+    </div>
     <div id="trust-response" style="display:none">
       <label>Instrument A allocation: <span id="allocation-val">50</span> / 100</label>
       <input type="range" id="trust-alloc" min="0" max="100" value="50">
@@ -529,7 +542,7 @@ document.getElementById('cal-done-btn').addEventListener('click', () => {
  */
 async function runBlock(opts) {
   const { itemIds, block, sectionId, statusId, progressId, responseId,
-          confId, allocId, submitId, onDone } = opts;
+          confId, allocId, submitId, audioBarId, replayBtnId, onDone } = opts;
 
   show(sectionId);
 
@@ -568,21 +581,68 @@ async function runBlock(opts) {
       trialId = 'local-' + Math.random().toString(36).slice(2);
     }
 
-    // Schedule playback
+    // Schedule playback + show progress bar
     const buffer = buffers[itemId];
-    const { audioOffsetPerfNow } = scheduleBuffer(buffer);
+    const audioBarEl  = audioBarId  ? document.getElementById(audioBarId)  : null;
+    const replayBtnEl = replayBtnId ? document.getElementById(replayBtnId) : null;
+    // e.g. 'practice-audio-progress' → 'practice-audio-controls'
+    const ctrlsDivId  = audioBarId  ? audioBarId.replace('-progress', '-controls').replace('audio-controls', 'audio-controls') : null;
+    const ctrlsDiv    = ctrlsDivId  ? document.getElementById(ctrlsDivId) : null;
 
-    // Reset answer state
-    blockAnswer = null;
-    blockConfidence = confId ? parseInt(document.getElementById(confId).value) : 4;
-    blockAllocation = allocId ? parseInt(document.getElementById(allocId).value) : 50;
+    // Show controls div and reset bar
+    if (ctrlsDiv)   ctrlsDiv.style.display = 'block';
+    if (audioBarEl) audioBarEl.value = 0;
+    if (replayBtnEl) { replayBtnEl.disabled = true; replayBtnEl.dataset.used = '0'; replayBtnEl.textContent = '↺ Replay once'; }
 
-    // Enable response UI after audio ends
+    let { audioOffsetPerfNow } = scheduleBuffer(buffer);
+    const durationMs = buffer.duration * 1000;
+
+    // Animate progress bar
+    let animFrame;
+    if (audioBarEl) {
+      const startPerfNow = performance.now();
+      function animBar() {
+        const elapsed = performance.now() - startPerfNow;
+        audioBarEl.value = Math.min(100, (elapsed / durationMs) * 100);
+        if (elapsed < durationMs) animFrame = requestAnimationFrame(animBar);
+        else audioBarEl.value = 100;
+      }
+      animFrame = requestAnimationFrame(animBar);
+    }
+
+    // Enable replay button after first play completes (one-shot)
     const msUntilEnd = Math.max(0, audioOffsetPerfNow - performance.now());
     await new Promise(resolve => {
       setTimeout(() => {
         document.getElementById(statusId).textContent = 'Please respond:';
         document.getElementById(responseId).style.display = 'block';
+
+        // Enable one-shot replay
+        if (replayBtnEl && replayBtnEl.dataset.used === '0') {
+          replayBtnEl.disabled = false;
+          replayBtnEl.onclick = () => {
+            if (replayBtnEl.dataset.used !== '0') return;
+            replayBtnEl.dataset.used = '1';
+            replayBtnEl.disabled = true;
+            replayBtnEl.textContent = '(replayed)';
+            if (animFrame) cancelAnimationFrame(animFrame);
+            if (audioBarEl) audioBarEl.value = 0;
+            const r = scheduleBuffer(buffer);
+            audioOffsetPerfNow = r.audioOffsetPerfNow;
+            // Re-animate progress
+            if (audioBarEl) {
+              const rStart = performance.now();
+              function animReplay() {
+                const e2 = performance.now() - rStart;
+                audioBarEl.value = Math.min(100, (e2 / durationMs) * 100);
+                if (e2 < durationMs) requestAnimationFrame(animReplay);
+                else audioBarEl.value = 100;
+              }
+              requestAnimationFrame(animReplay);
+            }
+            logEvent('replay', { item_id: itemId, trial_id: trialId });
+          };
+        }
 
         // Enable answer buttons
         const answerBtns = document.getElementById(responseId).querySelectorAll('.answer-btn');
@@ -661,6 +721,8 @@ function startPracticeBlock() {
     confId: 'practice-conf',
     allocId: null,
     submitId: 'practice-submit',
+    audioBarId: 'practice-audio-progress',
+    replayBtnId: 'practice-replay-btn',
     onDone: startFallacyBlock,
   });
 }
@@ -680,6 +742,8 @@ function startFallacyBlock() {
     confId: 'fallacy-conf',
     allocId: null,
     submitId: 'fallacy-submit',
+    audioBarId: 'fallacy-audio-progress',
+    replayBtnId: 'fallacy-replay-btn',
     onDone: startTrustBlock,
   });
 }
@@ -688,7 +752,6 @@ function startFallacyBlock() {
 // 6. TRUST BLOCK
 // ============================================================
 function startTrustBlock() {
-  // Show allocation value live
   document.getElementById('trust-alloc').oninput = e => {
     document.getElementById('allocation-val').textContent = e.target.value;
   };
@@ -702,6 +765,8 @@ function startTrustBlock() {
     confId: null,
     allocId: 'trust-alloc',
     submitId: 'trust-submit',
+    audioBarId: 'trust-audio-progress',
+    replayBtnId: 'trust-replay-btn',
     onDone: startManipulation,
   });
 }
