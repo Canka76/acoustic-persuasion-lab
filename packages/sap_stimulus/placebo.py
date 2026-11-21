@@ -40,34 +40,38 @@ def make_placebo_layer(
     arm_b_layer: np.ndarray,
     sr: int,
     seed: int = 1234,
-    am_depth: float = 0.03,
 ) -> np.ndarray:
     """
-    Return a placebo layer matching arm_b_layer RMS and spectrum,
-    with jittered AM instead of coherent AM.
+    Return spectrum- and RMS-matched noise shaped to arm_b_layer.
+    Does NOT apply AM — caller applies jittered AM after duck_to_snr so the
+    modulation depth is preserved in the delivered mix (same fix as arm B).
     """
     rng = np.random.default_rng(seed)
     noise = rng.standard_normal(len(arm_b_layer)).astype(np.float32)
-
     shaped = _shape_noise_to_layer(noise, arm_b_layer)
-
-    # Match RMS to arm_b_layer
     target_rms = float(np.sqrt(np.mean(arm_b_layer ** 2) + 1e-12))
     shaped_rms = float(np.sqrt(np.mean(shaped ** 2) + 1e-12))
     shaped *= target_rms / shaped_rms
+    return shaped.astype(np.float32)
 
-    # Apply jittered AM (phase-continuous across blocks)
+
+def apply_jittered_am(
+    wav: np.ndarray,
+    sr: int,
+    seed: int = 1235,
+    am_depth: float = 0.03,
+) -> np.ndarray:
+    """Apply phase-continuous jittered AM (f_mod uniform 0.5–30 Hz, every 250 ms)."""
     block_samp = int(sr * 0.25)
-    rng2 = np.random.default_rng(seed + 1)
-    out = shaped.copy()
+    rng = np.random.default_rng(seed)
+    out = wav.copy()
     phase = 0.0
-    f_mod_hz = float(rng2.uniform(0.5, 30.0))
+    f_mod_hz = float(rng.uniform(0.5, 30.0))
     for start in range(0, len(out), block_samp):
         end = min(start + block_samp, len(out))
         t = np.arange(end - start) / sr
         modulator = (1.0 + am_depth * np.cos(2.0 * np.pi * f_mod_hz * t + phase)).astype(np.float32)
         out[start:end] *= modulator
         phase = float((2.0 * np.pi * f_mod_hz * (end - start) / sr + phase) % (2.0 * np.pi))
-        f_mod_hz = float(rng2.uniform(0.5, 30.0))
-
+        f_mod_hz = float(rng.uniform(0.5, 30.0))
     return out.astype(np.float32)

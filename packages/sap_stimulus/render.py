@@ -97,9 +97,13 @@ def _build_arm_c(
     # This matches the vocoder residual of Arm B without any harmonic manipulation.
     wav_world = pull_f0(base_wav, sr, acts=[], strength=0.0)
 
-    placebo = make_placebo_layer(arm_b_layer, sr)
-    placebo_scaled, achieved_snr = duck_to_snr(wav_world, placebo, sr, target_snr_db=snr_db)
-    placebo_scaled = placebo_scaled[:len(wav_world)]
+    placebo_shaped = make_placebo_layer(arm_b_layer, sr)
+    # Duck FIRST (same order as arm B): duck_to_snr on constant-amplitude shaped noise,
+    # then apply jittered AM so the modulation depth survives in the delivered mix.
+    placebo_ducked, achieved_snr = duck_to_snr(wav_world, placebo_shaped, sr, target_snr_db=snr_db)
+    placebo_ducked = placebo_ducked[:len(wav_world)]
+    from sap_stimulus.placebo import apply_jittered_am
+    placebo_scaled = apply_jittered_am(placebo_ducked, sr, am_depth=0.03)
     mixed = wav_world + placebo_scaled
     mixed = normalize_lufs(mixed, sr)
     mixed = peak_limit(mixed)
