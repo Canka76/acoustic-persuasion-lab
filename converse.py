@@ -281,9 +281,10 @@ def main() -> None:
 def _scan(path: Path) -> None:
     """Run the acoustic firewall on *path* and print the result."""
     try:
-        from acoustic_firewall.features import extract
+        from acoustic_firewall.features import extract, _WINDOW_S
         from acoustic_firewall.model import load_model, predict
         wav, sr = load(path)
+        duration_s = len(wav) / sr
         feats = extract(wav, sr)
         model_path = _ROOT / "packages" / "acoustic_firewall" / "models" / "detector_v1.joblib"
         if not model_path.exists():
@@ -291,11 +292,18 @@ def _scan(path: Path) -> None:
             return
         model = load_model(model_path)
         report = predict(feats, model)
+        coherence_nan = report.f_mod_hz is None or (
+            isinstance(report.f_mod_hz, float) and __import__("math").isnan(report.f_mod_hz)
+        )
         print(f"  [scan] verdict={report.verdict}  score={report.score:.3f}"
               f"  f_mod_hz={report.f_mod_hz}  threshold={report.threshold_used}")
+        if duration_s < _WINDOW_S:
+            print(f"  [scan] ⚠  clip is {duration_s:.1f} s — shorter than the {_WINDOW_S:.0f} s "
+                  f"analysis window, so inter_band_coherence_* features are nan and imputed "
+                  f"to 0. Verdict is based on LF energy / kurtosis only. "
+                  f"Use a sentence ≥ {_WINDOW_S:.0f} s for a coherence-based result.")
     except (ImportError, FileNotFoundError, RuntimeError) as e:
         print(f"  [scan] error: {e}")
-
 
 if __name__ == "__main__":
     main()
