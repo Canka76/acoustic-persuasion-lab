@@ -305,56 +305,54 @@ function generatePinkNoise(nSamples, sr) {
 /** Create a stereo AudioBuffer with Huggins pitch: 180° phase inversion in
  *  the 400–600 Hz band on the right channel only.
  *
- *  FIX: The 101-tap causal FIR has group delay = (bpLen-1)/2 = 50 samples.
- *  Both channels must use the delayed direct path (noise[i-50]) so that
- *  right = delayed_noise - 2*band is a true phase inversion at 500 Hz,
- *  not a time-shifted subtraction that produces a lateralized level difference.
+ *  Implementation: zero-phase bandpass via double-pass OfflineAudioContext
+ *  (forward biquad + reverse + backward biquad + reverse = filtfilt).
+ *
+ *  Why not FIR: a 101-tap FIR has frequency resolution sr/N = 475 Hz, wider
+ *  than the 200 Hz target band → passband gain −13 dB, essentially no filtering.
+ *  An IIR biquad (Q=2.5, fc=500 Hz) cleanly isolates 400–600 Hz.
+ *  Double-pass achieves zero phase → true 180° inversion in the band.
+ *
+ *  Returns a Promise<AudioBuffer> — caller must await.
  */
-function makeHugginsPair(sr, durationS) {
+async function makeHugginsPair(sr, durationS) {
   const nSamples = Math.round(sr * durationS);
   const noise = generatePinkNoise(nSamples, sr);
 
-  // 101-tap Hamming-windowed bandpass FIR, 400–600 Hz
-  const bpLen = 101;
-  const delay = (bpLen - 1) / 2;  // = 50 samples group delay
-  const bpH = new Float32Array(bpLen);
-  const fc1 = 400 / sr;
-  const fc2 = 600 / sr;
-  for (let k = 0; k < bpLen; k++) {
-    const n = k - delay;
-    const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * k / (bpLen - 1));
-    bpH[k] = (n === 0)
-      ? 2 * (fc2 - fc1)
-      : (Math.sin(2 * Math.PI * fc2 * n) - Math.sin(2 * Math.PI * fc1 * n)) / (Math.PI * n);
-    bpH[k] *= w;
+  // Single-pass causal biquad bandpass using OfflineAudioContext
+  async function biquadPass(signal) {
+    const oc = new OfflineAudioContext(1, signal.length, sr);
+    const buf = oc.createBuffer(1, signal.length, sr);
+    buf.copyToChannel(new Float32Array(signal), 0);
+    const src = oc.createBufferSource();
+    src.buffer = buf;
+    // 2nd-order bandpass: Q = fc/BW = 500/200 = 2.5
+    const bp = oc.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 500;
+    bp.Q.value = 2.5;
+    src.connect(bp);
+    bp.connect(oc.destination);
+    src.start(0);
+    const r = await oc.startRendering();
+    return Array.from(r.getChannelData(0));
   }
 
-  // Causal convolution → band[i] is aligned to noise[i - delay]
-  const band = new Float32Array(nSamples);
-  for (let i = 0; i < nSamples; i++) {
-    let s = 0;
-    for (let k = 0; k < bpLen; k++) {
-      const idx = i - k;
-      if (idx >= 0) s += bpH[k] * noise[idx];
-    }
-    band[i] = s;
-  }
+  // Forward pass
+  const fwd = await biquadPass(noise);
+  // Reverse → backward pass → reverse back = zero-phase (filtfilt)
+  const bwd = await biquadPass(fwd.slice().reverse());
+  const band_zp = bwd.slice().reverse();
 
-  // Delay both channels by `delay` samples so direct path aligns with filtered band
-  // left  = noise[i - delay]           (identical to right outside the BP band)
-  // right = noise[i - delay] - 2*band  (phase-inverted in 400–600 Hz band → Huggins)
-  const left  = new Float32Array(nSamples);
+  // L = noise (unchanged), R = noise − 2×band_zp (antiphase in band)
+  const left  = new Float32Array(noise);
   const right = new Float32Array(nSamples);
-  for (let i = 0; i < nSamples; i++) {
-    const direct = (i - delay >= 0) ? noise[i - delay] : 0;
-    left[i]  = direct;
-    right[i] = direct - 2 * band[i];
-  }
+  for (let i = 0; i < nSamples; i++) right[i] = noise[i] - 2 * band_zp[i];
 
-  const buf = ctx.createBuffer(2, nSamples, sr);
-  buf.copyToChannel(left, 0);
-  buf.copyToChannel(right, 1);
-  return buf;
+  const hugBuf = ctx.createBuffer(2, nSamples, sr);
+  hugBuf.copyToChannel(left, 0);
+  hugBuf.copyToChannel(right, 1);
+  return hugBuf;
 }
 
 /** Create plain stereo pink noise buffer (control, no Huggins) */
@@ -475,8 +473,10 @@ async function runHpTrial() {
   hpCorrect[hpTrial] = hugginsPos;
 
   const sr = ctx.sampleRate;
-  const hugBuf = makeHugginsPair(sr, 2.0);
+  document.getElementById('hp-question').textContent = 'Preparing sounds…';
+  const hugBuf = await makeHugginsPair(sr, 2.0);
   const plainBuf = makePlainNoise(sr, 2.0);
+  document.getElementById('hp-question').textContent = 'Listen to both sounds, then pick the one with the centred tone:';
 
   const btn1 = document.getElementById('hp-btn1');
   const btn2 = document.getElementById('hp-btn2');
