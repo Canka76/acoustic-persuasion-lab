@@ -47,8 +47,16 @@ def _load_corpus() -> list[dict]:
     return [item for item in data["items"] if item["block"] in ("fallacy", "practice")]
 
 
+def _load_all_corpus() -> list[dict]:
+    """All items including trust — for checks that must cover every stimulus."""
+    with CORPUS_JSON.open() as f:
+        data = json.load(f)
+    return data["items"]
+
+
 ITEMS = _load_corpus()
-ITEM_IDS = [item["id"] for item in ITEMS]
+ITEM_IDS = [item["id"] for item in ITEMS]          # fallacy + practice only
+ALL_ITEM_IDS = [item["id"] for item in _load_all_corpus()]  # + trust items
 ARMS = ["A", "B", "C"]
 
 TARGET_SNR_DB = -31.0
@@ -92,7 +100,7 @@ def _rms(arr: np.ndarray) -> float:
 #    (A is no longer bit-identical to base; all arms run WORLD pass-through.)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("item_id", ITEM_IDS)
+@pytest.mark.parametrize("item_id", ALL_ITEM_IDS)
 def test_source_identity(item_id: str) -> None:
     """All three arm manifests must share the same source_sha256.
     This confirms arms differ only by WORLD pitch-pull strength and added layer,
@@ -391,8 +399,8 @@ def test_intelligibility_preserved() -> None:
 # 9. Watermark roundtrip — decode from B and C, payload starts with b'SPAP-LAB'
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("item_id", ITEM_IDS)
-@pytest.mark.parametrize("arm", ["B", "C"])
+@pytest.mark.parametrize("item_id", ALL_ITEM_IDS)
+@pytest.mark.parametrize("arm", ["A", "B", "C"])
 def test_watermark_roundtrip(arm: str, item_id: str) -> None:
     """DSSS watermark payload must start with b'SPAP-LAB' on the raw WAV."""
     from sap_stimulus.watermark import decode  # type: ignore

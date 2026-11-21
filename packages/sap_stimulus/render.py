@@ -134,7 +134,7 @@ def render_all(
 
         base_wav, sr = load(base_path, target_sr=48_000)
         base_hash = sha256(base_path)
-        is_processable = item["block"] in ("fallacy", "practice")
+        is_processable = item["block"] in ("fallacy", "practice", "trust")
 
         # Pre-build B layer once so C can reuse it (avoid double WORLD analysis)
         arm_b_layer: np.ndarray | None = None
@@ -146,17 +146,19 @@ def render_all(
 
             if arm == "A":
                 if is_processable:
-                    # WORLD pass-through (strength=0, no pitch change, no added layer)
-                    # so all three arms share the same vocoder artefact baseline.
                     from sap_stimulus.f0_pull import pull_f0
+                    from sap_stimulus.watermark import embed
                     wav_a_world = pull_f0(base_wav, sr, acts=[], strength=0.0)
                     wav_a_world = normalize_lufs(wav_a_world, sr)
                     wav_a_world = peak_limit(wav_a_world)
+                    wav_a_world, stim_id_a = embed(wav_a_world, sr)
                     save(wav_a_world, sr, out_wav)
+                    info: dict = {"arm": "A", "item_id": iid, "source_sha256": base_hash,
+                                  "stimulus_id": stim_id_a, "world_passthrough": True}
                 else:
                     shutil.copy2(base_path, out_wav)
-                info: dict = {"arm": "A", "item_id": iid, "source_sha256": base_hash,
-                              "world_passthrough": is_processable}
+                    info = {"arm": "A", "item_id": iid, "source_sha256": base_hash,
+                            "world_passthrough": False, "note": "trust_no_processing"}
 
             elif arm == "B" and is_processable:
                 mixed, info, arm_b_layer, layer_am_b = _build_arm_b(
