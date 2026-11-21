@@ -61,17 +61,32 @@ def apply_jittered_am(
     seed: int = 1235,
     am_depth: float = 0.03,
 ) -> np.ndarray:
-    """Apply phase-continuous jittered AM (f_mod uniform 0.5–30 Hz, every 250 ms)."""
+    """Apply phase-continuous jittered AM (f_mod uniform 0.5–30 Hz, every 250 ms).
+
+    The 9–11 Hz band is excluded from the draw so the placebo arm can never
+    accumulate coherent 10 Hz energy that would fail the arm-C QA gate.
+    The exclusion uses a two-segment uniform draw: [0.5, 9) ∪ (11, 30].
+    """
     block_samp = int(sr * 0.25)
     rng = np.random.default_rng(seed)
     out = wav.copy()
     phase = 0.0
-    f_mod_hz = float(rng.uniform(0.5, 30.0))
+
+    def _draw_f_mod() -> float:
+        """Draw f_mod uniformly from [0.5, 9) ∪ (11, 30] Hz."""
+        low_w = 9.0 - 0.5     # 8.5
+        high_w = 30.0 - 11.0  # 19.0
+        total = low_w + high_w
+        if rng.uniform(0.0, total) < low_w:
+            return float(rng.uniform(0.5, 9.0))
+        return float(rng.uniform(11.0, 30.0))
+
+    f_mod_hz = _draw_f_mod()
     for start in range(0, len(out), block_samp):
         end = min(start + block_samp, len(out))
         t = np.arange(end - start) / sr
         modulator = (1.0 + am_depth * np.cos(2.0 * np.pi * f_mod_hz * t + phase)).astype(np.float32)
         out[start:end] *= modulator
         phase = float((2.0 * np.pi * f_mod_hz * (end - start) / sr + phase) % (2.0 * np.pi))
-        f_mod_hz = float(rng.uniform(0.5, 30.0))
+        f_mod_hz = _draw_f_mod()
     return out.astype(np.float32)

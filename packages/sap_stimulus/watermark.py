@@ -1,7 +1,16 @@
 """DSSS (Direct-Sequence Spread-Spectrum) watermark.
 
 Payload: b"SPAP-LAB" + 8-byte stimulus UUID (16 bytes = 128 bits).
-Carrier: centre of 7–9 kHz band. BPSK with 127-chip m-sequence. Level: −50 dBFS.
+Carrier: 7 500 Hz single-frequency. BPSK with 127-chip m-sequence. Level: −50 dBFS.
+
+Phase-coherence constraint: the carrier must complete an integer number of
+cycles per rep_len = 128 × 127 = 16 256 samples so coherent averaging across
+repetitions amplifies rather than cancels the DSSS signal.
+
+    cycles_per_rep = rep_len × fc / sr  must be integer
+    = 16 256 × fc / 48 000
+    7 500 Hz → 16256 × 7500 / 48000 = 2540  ✓  (integer)
+    8 000 Hz → 16256 × 8000 / 48000 = 2709.333  ✗  (caused cancellation)
 """
 from __future__ import annotations
 
@@ -10,9 +19,9 @@ import uuid
 import numpy as np
 
 PAYLOAD_PREFIX = b"SPAP-LAB"
-PN_LENGTH = 127          # degree-7 maximal-length sequence
-CARRIER_LOW_HZ = 7000.0
-CARRIER_HIGH_HZ = 9000.0
+PN_LENGTH = 127
+CARRIER_LOW_HZ  = 7500.0  # fc = (low+high)/2 = 7500 — phase-coherent at 48 kHz
+CARRIER_HIGH_HZ = 7500.0  # kept equal; band label is now a point frequency
 LEVEL_DBFS = -50.0
 
 
@@ -77,7 +86,14 @@ def decode(wav: np.ndarray, sr: int) -> bytes | None:
     file before correlating — necessary because the watermark sits at −50 dBFS
     and a single-repetition SNR (−27 dB before DSSS gain) is too low for
     reliable per-repetition decoding.
+
+    After coherent averaging, a narrow bandpass around fc is applied before
+    demodulation to remove systematic interference from speech harmonics that
+    would otherwise create a coherent (non-averaging-out) bias on individual
+    bit correlations.  The carrier at 7 500 Hz has fc±1 500 Hz pass-band.
     """
+    from scipy.signal import butter, sosfiltfilt
+
     n_bits = 128
     chips_per_bit = PN_LENGTH
     rep_len = n_bits * chips_per_bit  # samples per one watermark cycle (16 256 @ 48 kHz)
@@ -92,7 +108,14 @@ def decode(wav: np.ndarray, sr: int) -> bytes | None:
         stacked += wav[i * rep_len:(i + 1) * rep_len].astype(np.float64)
     stacked /= n_reps  # averaging gives +10*log10(n_reps) dB SNR gain
 
+    # Bandpass around carrier to suppress speech harmonics that survive averaging
     fc = (CARRIER_LOW_HZ + CARRIER_HIGH_HZ) / 2.0
+    bw = max(1500.0, fc * 0.2)  # ±bw Hz around fc
+    low = max(fc - bw, 100.0)
+    high = min(fc + bw, sr / 2.0 - 100.0)
+    sos = butter(4, [low, high], btype="bandpass", fs=sr, output="sos")
+    stacked = sosfiltfilt(sos, stacked)
+
     t = np.arange(rep_len) / sr
     carrier = np.cos(2.0 * np.pi * fc * t)
     demod = stacked * carrier
