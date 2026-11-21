@@ -441,6 +441,7 @@ async function runHpTrial() {
     if (hpScore >= 5) {
       statusEl.textContent = `✓ ${hpScore}/6 correct — continuing.`;
       statusEl.style.color = '#27ae60';
+      await api('/headphone', { participant_id: participantId, hp_score: hpScore, hp_attempts: hpAttempt });
       setTimeout(() => show('sec-calibration'), 1200);
     } else if (hpAttempt < HP_MAX_ATTEMPTS) {
       statusEl.textContent = `✗ ${hpScore}/6 correct (attempt ${hpAttempt}/${HP_MAX_ATTEMPTS}) — make sure both earbuds are in and try again.`;
@@ -460,6 +461,7 @@ async function runHpTrial() {
       statusEl.style.color = '#c0392b';
       document.getElementById('hp-panel').style.display = 'none';
       document.getElementById('hp-retry-btn').style.display = 'none';
+      await api('/headphone', { participant_id: participantId, hp_score: hpScore, hp_attempts: hpAttempt });
     }
     return;
   }

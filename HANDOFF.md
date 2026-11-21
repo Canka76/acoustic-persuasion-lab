@@ -92,9 +92,11 @@ A single biquad Q=2.5 double-pass is sufficient; cascading would narrow the band
 
 ### Step 9 — Pilot + Main Run (blocked on participants/IRB)
 
-1. **Internal dry run (n=6):** Have 6 internal participants complete a full session at http://127.0.0.1:8010. Need: headphone check passing, full trial block, complete CSV export.
-   - Check CSV: `GET /admin/export.csv -H "X-Admin-Token: dev-token"`
-   - Participant 1 (`492065fe`, arm A) already completed in previous dry run
+1. **Internal dry run (n=6):** Have 6 internal participants complete a full session at http://127.0.0.1:8010.
+   - Check CSV: `curl http://127.0.0.1:8010/admin/export.csv -H "X-Admin-Token: dev-token"`
+   - ⚠️ **Participant `492065fe` does NOT count toward n=6.** Their session was run against the broken FIR Huggins generator (commits before `48ca304`) and may have passed headphone screening without actually experiencing binaural contrast. Discard or treat as a negative control.
+   - HP screening result (`hp_score`, `hp_attempts`) is now persisted to `participant` table on both pass and terminal fail. The analysis exclusion criterion (pre-registered §5) requires `hp_score >= 5`; rows where `hp_score IS NULL` indicate sessions started before this fix — treat as missing/exclude.
+   - Participant 1 for n=6 count: first session using the fixed generator (commit `48ca304`+).
 2. **Threshold pilot (n=12):** Use port 8001 (threshold pilot app) to establish operating SNR. After pilot: re-render if needed, re-run QA gate.
 3. **Main run (N=204):** After IRB approval and pilot data.
 

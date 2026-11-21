@@ -60,7 +60,9 @@ def _init_db() -> None:
                 ua TEXT,
                 age_band TEXT,
                 native_lang TEXT,
-                hearing_impaired INTEGER
+                hearing_impaired INTEGER,
+                hp_score INTEGER,
+                hp_attempts INTEGER
             );
             CREATE TABLE IF NOT EXISTS trial (
                 id TEXT PRIMARY KEY,
@@ -93,7 +95,13 @@ def _init_db() -> None:
         try:
             conn.execute("ALTER TABLE response ADD COLUMN has_replay INTEGER DEFAULT 0")
         except Exception:
-            pass  # column already exists
+            pass
+        # Migration: add hp_score / hp_attempts if DB predates these columns (idempotent)
+        for col, default in [("hp_score", "NULL"), ("hp_attempts", "NULL")]:
+            try:
+                conn.execute(f"ALTER TABLE participant ADD COLUMN {col} INTEGER DEFAULT {default}")
+            except Exception:
+                pass
 
 
 # Run at import time
@@ -133,6 +141,12 @@ class TrialResponseIn(BaseModel):
     audio_offset_ts: Optional[float] = None
 
 
+class HeadphoneIn(BaseModel):
+    participant_id: str
+    hp_score: int
+    hp_attempts: int
+
+
 class EventIn(BaseModel):
     participant_id: str
     type: str
@@ -154,6 +168,16 @@ async def create_participant(body: ParticipantIn) -> dict:
             (pid, arm, time.time(), body.ua, body.age_band, body.native_lang, int(body.hearing_impaired)),
         )
     return {"participant_id": pid, "arm_code": arm}
+
+@app.post("/headphone")
+async def record_headphone(body: HeadphoneIn) -> dict:
+    """Persist final headphone screening result (called once: on pass or terminal fail)."""
+    with _get_conn() as conn:
+        conn.execute(
+            "UPDATE participant SET hp_score=?, hp_attempts=? WHERE id=?",
+            (body.hp_score, body.hp_attempts, body.participant_id),
+        )
+    return {"ok": True}
 
 
 @app.get("/stimuli/{arm}/{item_id}")
@@ -234,6 +258,8 @@ async def export_csv(x_admin_token: Optional[str] = Header(default=None)):
                 p.age_band,
                 p.native_lang,
                 p.hearing_impaired,
+                p.hp_score,
+                p.hp_attempts,
                 t.id AS trial_id,
                 t.item_id,
                 t.block,
@@ -257,6 +283,7 @@ async def export_csv(x_admin_token: Optional[str] = Header(default=None)):
     writer = csv.writer(buf)
     writer.writerow([
         "participant_id", "arm_code", "age_band", "native_lang", "hearing_impaired",
+        "hp_score", "hp_attempts",
         "trial_id", "item_id", "block", "position", "audio_path", "presented_at",
         "rt_ms", "rt_invalid", "has_replay", "answer", "confidence", "allocation", "audio_offset_ts",
     ])
