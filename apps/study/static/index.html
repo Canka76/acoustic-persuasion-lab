@@ -417,9 +417,11 @@ document.getElementById('consent-btn').addEventListener('click', async () => {
 // 2. HEADPHONE SCREEN
 // ============================================================
 const HP_TRIALS = 6;
+const HP_MAX_ATTEMPTS = 2;  // cap — unlimited retries lets speaker users guess through
 let hpScore = 0;
 let hpTrial = 0;
-let hpCorrect = [];   // which position (1 or 2) has the Huggins tone per trial
+let hpAttempt = 1;          // logged per headphone_screen event for auditability
+let hpCorrect = [];
 let hpPlaying = false;
 
 document.getElementById('hp-start-btn').addEventListener('click', async () => {
@@ -431,15 +433,14 @@ document.getElementById('hp-start-btn').addEventListener('click', async () => {
 
 async function runHpTrial() {
   if (hpTrial >= HP_TRIALS) {
-    // Done
     const statusEl = document.getElementById('headphone-status');
-    logEvent('headphone_screen', { score: hpScore, trials: HP_TRIALS });
+    logEvent('headphone_screen', { score: hpScore, trials: HP_TRIALS, attempt: hpAttempt });
     if (hpScore >= 5) {
       statusEl.textContent = `✓ ${hpScore}/6 correct — continuing.`;
       statusEl.style.color = '#27ae60';
       setTimeout(() => show('sec-calibration'), 1200);
-    } else {
-      statusEl.textContent = `✗ ${hpScore}/6 correct — make sure both earbuds are in and try again.`;
+    } else if (hpAttempt < HP_MAX_ATTEMPTS) {
+      statusEl.textContent = `✗ ${hpScore}/6 correct (attempt ${hpAttempt}/${HP_MAX_ATTEMPTS}) — make sure both earbuds are in and try again.`;
       statusEl.style.color = '#c0392b';
       document.getElementById('hp-panel').style.display = 'none';
       const retryBtn = document.getElementById('hp-retry-btn');
@@ -447,13 +448,19 @@ async function runHpTrial() {
       retryBtn.onclick = () => {
         retryBtn.style.display = 'none';
         statusEl.textContent = '';
-        hpScore = 0; hpTrial = 0; hpCorrect = [];
+        hpScore = 0; hpTrial = 0; hpCorrect = []; hpAttempt++;
         document.getElementById('hp-panel').style.display = 'block';
         runHpTrial();
       };
+    } else {
+      statusEl.textContent = `✗ ${hpScore}/6 correct (attempt ${hpAttempt}/${HP_MAX_ATTEMPTS}) — headphone check failed. Please use headphones or in-ear buds and reload the page to try again.`;
+      statusEl.style.color = '#c0392b';
+      document.getElementById('hp-panel').style.display = 'none';
+      document.getElementById('hp-retry-btn').style.display = 'none';
     }
     return;
   }
+
 
   document.getElementById('hp-progress').textContent = `Trial ${hpTrial + 1} of ${HP_TRIALS}`;
   document.getElementById('hp-question').textContent = 'Listen to both sounds, then say which had a tone in the centre.';

@@ -58,3 +58,39 @@ on the B–A contrast. However:
 - Covariate: `has_replay` (0/1) added to mixed model as nuisance regressor
 - Check: replay rate per arm (test for arm × replay interaction)
 
+---
+
+## DEV-002 — Headphone screen retry (capped at 2 attempts)
+
+**Date:** 2026-11-21  
+**Type:** Relaxation of hard gate from prereg §5 exclusion 1  
+**Status:** Pre-data
+
+### What changed
+Prereg §5 excludes participants who fail the 6-trial Huggins-pitch headphone
+screen (< 5/6 correct) with no retry. The implemented app allows one retry
+(maximum 2 attempts total). Each attempt is logged as a `headphone_screen`
+event with `attempt` index (1 or 2) and `score`.
+
+### Rationale
+Internal dry-run tester passed the headphone check repeatedly while using
+in-ear buds but failed twice on the first attempt due to unclear instructions
+(did not know what "tone in the centre" meant). The instructions were improved
+(see commit `2bfa410`) and a single retry was added so legitimate headphone
+users who fail on first attempt due to instruction ambiguity are not excluded.
+
+### Why 2 attempts (not unlimited)
+P(passing 6-trial 2AFC by guessing) ≈ 7/64 ≈ 11% per attempt. With unlimited
+retries a speaker user passes within ~10 attempts. With a 2-attempt cap,
+P(speaker user passing) = 1 − (1 − 7/64)² ≈ 20% — still elevated but bounded.
+The gate remains materially tighter than no screen at all.
+
+### Direction of expected bias
+Participants who pass on attempt 2 may have lower headphone compliance than
+attempt-1 passers. If arm assignment is balanced across attempt index (expected
+under randomization), there is no systematic directional bias on H1/H2.
+
+### Analysis additions (exploratory)
+- Sensitivity: re-run H1/H2 restricting to attempt-1 passers only
+  (`event.data->>attempt == 1` in the headphone_screen event log)
+
