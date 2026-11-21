@@ -21,6 +21,12 @@ corpus/base_renders/
 corpus/stimuli/
 corpus/**/*.wav
 
+# Root-level WAV files (test/scratch artifacts)
+/*.wav
+
+# Graphify cache (AST extraction cache, large and regeneratable)
+graphify-out/cache/
+
 # Trained models
 *.joblib
 models/piper/

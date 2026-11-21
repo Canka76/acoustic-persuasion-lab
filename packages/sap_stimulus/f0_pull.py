@@ -16,10 +16,16 @@ def pull_f0(
     sr: int,
     acts: list[Act],
     strength: float = DEFAULT_STRENGTH,
-) -> np.ndarray:
+    return_diag: bool = False,
+) -> np.ndarray | tuple[np.ndarray, dict]:
     """
     WORLD analysis → shift F0 toward nearest chord tone → resynthesize.
     Unvoiced frames untouched. Per-frame shift clamped to MAX_SHIFT_CENTS.
+
+    Args:
+        return_diag: if True, return (wav, diag) where diag contains
+            'f0_pre', 'f0_post', 'abs_cents' (ground-truth per-frame shift
+            with no estimator noise — same frame grid, same voicing mask).
     """
     try:
         import pyworld as pw
@@ -53,7 +59,23 @@ def pull_f0(
         new_f0[i] = f0_cand
 
     out64 = pw.synthesize(new_f0, sp, ap, sr, frame_period=frame_period_ms)
-    return out64.astype(np.float32)
+    result = out64.astype(np.float32)
+
+    if not return_diag:
+        return result
+
+    voiced_mask = f0 > 0
+    abs_cents = np.where(
+        voiced_mask,
+        np.abs(1200.0 * np.log2(np.where(voiced_mask, new_f0 / (f0 + 1e-9), 1.0))),
+        np.nan,
+    )
+    diag = {
+        "f0_pre":     f0,
+        "f0_post":    new_f0,
+        "abs_cents":  abs_cents,  # NaN for unvoiced frames
+    }
+    return result, diag
 
 
 def _make_act_lookup(acts: list[Act]):
