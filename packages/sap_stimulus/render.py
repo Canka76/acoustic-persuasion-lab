@@ -47,15 +47,18 @@ def _build_arm_b(
     acts = segment(text, len(base_wav) / sr, wav=base_wav, sr=sr)
     wav_pitched = pull_f0(base_wav, sr, acts, strength=pull_strength)
     layer = subharmonic_layer(acts, sr, len(wav_pitched))
+    # Duck FIRST (variable gain tracks speech envelope), then apply AM.
+    # If AM is applied before ducking, the per-frame duck gain smears the fixed
+    # 10 Hz tone into syllabic-rate sidebands, making it undetectable in the mix.
+    layer_ducked, achieved_snr = duck_to_snr(wav_pitched, layer, sr, target_snr_db=snr_db)
+    layer_ducked = layer_ducked[:len(wav_pitched)]
+    layer_scaled = amplitude_modulate(layer_ducked, sr, f_mod_hz=f_mod_hz, depth=am_depth)
+    # layer_am: AM applied to constant-amplitude drone (for unit-test sidecar only)
     layer_am = amplitude_modulate(layer, sr, f_mod_hz=f_mod_hz, depth=am_depth)
-    layer_scaled, achieved_snr = duck_to_snr(wav_pitched, layer_am, sr, target_snr_db=snr_db)
-    layer_scaled = layer_scaled[:len(wav_pitched)]
     mixed = wav_pitched + layer_scaled
     mixed = normalize_lufs(mixed, sr)
     mixed = peak_limit(mixed)
     mixed, stim_id = embed(mixed, sr)
-    # Save the scaled layer as a sidecar for QA verification
-
     info = {
         "arm": "B",
         "item_id": item_id,
