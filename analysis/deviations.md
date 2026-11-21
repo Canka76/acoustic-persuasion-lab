@@ -82,7 +82,12 @@ users who fail on first attempt due to instruction ambiguity are not excluded.
 ### Why 2 attempts (not unlimited)
 P(passing 6-trial 2AFC by guessing) ≈ 7/64 ≈ 11% per attempt. With unlimited
 retries a speaker user passes within ~10 attempts. With a 2-attempt cap,
-P(speaker user passing) = 1 − (1 − 7/64)² ≈ 20% — still elevated but bounded.
+P(speaker user passing) ≥ 1 − (1 − 7/64)² ≈ 20% — this is a **lower bound**:
+the cap is enforced client-side only (JavaScript state). A participant who
+reloads the page starts a fresh session with `hpAttempt = 1`, circumventing
+the cap. The terminal-fail message does **not** suggest reloading (commit
+`96ff5ae` removed that instruction). Motivated speaker users can still reload,
+so this gate is best treated as a soft screen, not a hard exclude.
 The gate remains materially tighter than no screen at all.
 
 ### Direction of expected bias

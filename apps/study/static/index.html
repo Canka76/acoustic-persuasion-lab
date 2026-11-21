@@ -453,7 +453,7 @@ async function runHpTrial() {
         runHpTrial();
       };
     } else {
-      statusEl.textContent = `✗ ${hpScore}/6 correct (attempt ${hpAttempt}/${HP_MAX_ATTEMPTS}) — headphone check failed. Please use headphones or in-ear buds and reload the page to try again.`;
+      statusEl.textContent = `✗ ${hpScore}/6 correct (attempt ${hpAttempt}/${HP_MAX_ATTEMPTS}) — headphone check failed. Please ensure you are using headphones or in-ear buds and contact the researcher for assistance.`;
       statusEl.style.color = '#c0392b';
       document.getElementById('hp-panel').style.display = 'none';
       document.getElementById('hp-retry-btn').style.display = 'none';
