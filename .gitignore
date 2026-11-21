@@ -35,3 +35,7 @@ study.db
 .vscode/
 .idea/
 *.swp
+
+# Graphify — commit GRAPH_REPORT.md and AGENTS.md, skip large binary outputs
+graphify-out/graph.html
+graphify-out/graph.json
