@@ -53,14 +53,16 @@
 <!-- ===== 2. HEADPHONE SCREEN ===== -->
 <section id="sec-headphone">
   <h1>Headphone Check</h1>
-  <p>Please put on headphones (not speakers). You will hear pairs of sounds and decide which contains a faint tone in the centre.</p>
-  <p class="info">6 trials. You need to get at least 5 correct to continue.</p>
+  <p>Please put on headphones or in-ear buds — <strong>not speakers</strong>. This check only works with headphones.</p>
+  <p>You will hear two noise sounds. One of them contains a faint tone that seems to come from <strong>inside your head</strong> or the centre — not from left or right, but straight down the middle. The other is plain noise.</p>
+  <p>Click each sound button to listen (you can replay them), then choose which one had the centred tone.</p>
+  <p class="info">6 trials. You need to get at least 5 correct to continue. If you fail, you can retry.</p>
   <div class="trial-panel" id="hp-panel" style="display:none">
     <div class="progress" id="hp-progress"></div>
-    <p id="hp-question">Listen to the two sounds below:</p>
+    <p id="hp-question">Listen to both sounds, then pick the one with the centred tone:</p>
     <div class="btn-row">
-      <button id="hp-btn1" disabled>Sound 1</button>
-      <button id="hp-btn2" disabled>Sound 2</button>
+      <button id="hp-btn1" disabled>▶ Sound 1</button>
+      <button id="hp-btn2" disabled>▶ Sound 2</button>
     </div>
     <div class="btn-row" style="margin-top:20px">
       <button id="hp-ans1" disabled>→ Sound 1 had the tone</button>
@@ -69,6 +71,7 @@
   </div>
   <button id="hp-start-btn">Start Headphone Check</button>
   <div id="headphone-status"></div>
+  <button id="hp-retry-btn" style="display:none;margin-top:12px">↺ Try again</button>
 </section>
 
 <!-- ===== 3. CALIBRATION ===== -->
@@ -312,11 +315,11 @@ function makeHugginsPair(sr, durationS) {
 
   const left = new Float32Array(noise);
 
-  // Build a bandpass FIR for ~500 Hz, BW ~100 Hz (simple windowed-sinc)
+  // Build a bandpass FIR for ~500 Hz, BW ~200 Hz (wider = more salient Huggins pitch)
   const bpLen = 101;
   const bpH = new Float32Array(bpLen);
-  const fc1 = 450 / sr;
-  const fc2 = 550 / sr;
+  const fc1 = 400 / sr;
+  const fc2 = 600 / sr;
   for (let k = 0; k < bpLen; k++) {
     const n = k - (bpLen - 1) / 2;
     const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * k / (bpLen - 1)); // Hamming
@@ -436,9 +439,18 @@ async function runHpTrial() {
       statusEl.style.color = '#27ae60';
       setTimeout(() => show('sec-calibration'), 1200);
     } else {
-      statusEl.textContent = `✗ ${hpScore}/6 correct — please use headphones. You cannot continue without passing this check.`;
+      statusEl.textContent = `✗ ${hpScore}/6 correct — make sure both earbuds are in and try again.`;
       statusEl.style.color = '#c0392b';
       document.getElementById('hp-panel').style.display = 'none';
+      const retryBtn = document.getElementById('hp-retry-btn');
+      retryBtn.style.display = 'inline-block';
+      retryBtn.onclick = () => {
+        retryBtn.style.display = 'none';
+        statusEl.textContent = '';
+        hpScore = 0; hpTrial = 0; hpCorrect = [];
+        document.getElementById('hp-panel').style.display = 'block';
+        runHpTrial();
+      };
     }
     return;
   }
@@ -451,8 +463,8 @@ async function runHpTrial() {
   hpCorrect[hpTrial] = hugginsPos;
 
   const sr = ctx.sampleRate;
-  const hugBuf = makeHugginsPair(sr, 1.2);
-  const plainBuf = makePlainNoise(sr, 1.2);
+  const hugBuf = makeHugginsPair(sr, 2.0);
+  const plainBuf = makePlainNoise(sr, 2.0);
 
   const btn1 = document.getElementById('hp-btn1');
   const btn2 = document.getElementById('hp-btn2');

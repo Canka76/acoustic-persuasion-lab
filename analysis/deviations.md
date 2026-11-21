@@ -33,18 +33,18 @@ assignment is unconfounded with replay rate (expected under randomization), the
 net effect is reduced measurement error (less noise) rather than systematic bias
 on the B–A contrast. However:
 
-1. **H5 (log-RT)**: Replayed trials receive `rt_invalid = 2` and are **excluded
-   from H5 by design**. The `rt_ms` for a replayed trial is measured from the
-   first-play offset but includes the replay duration (~12–16 s), making it
-   incomparable to non-replay trials and routinely exceeding the 20 s cap. Code 2
-   marks this as an explicit, designed exclusion rather than a silent dropout.
+1. **H5 (log-RT)**: Replayed trials have `has_replay = 1` and are **excluded
+   from H5 by design**. `rt_invalid` remains binary (0/1) as registered.
+   The `rt_ms` for a replayed trial is anchored to first-play offset but
+   includes the replay duration (~12–16 s), making it incomparable to
+   single-presentation trials. `analyze.py` filters `has_replay == 0` for H5.
    Nonrandom missingness risk: if replay rate differs by arm (e.g. arm B
    participants replay more due to manipulation distraction), H5 power is
    asymmetrically reduced. Report replay rate per arm as a check.
 
 2. **H1/H2 (d-prime)**: Replay may selectively help participants detect fallacies
    (ceiling pressure on accuracy). Pre-specified sensitivity analysis: re-run
-   primary H1/H2 test excluding trials with replay events (`rt_invalid == 2`).
+   primary H1/H2 test excluding trials with replay (`has_replay == 1`).
    If effect direction reverses or significance changes, the result is exploratory.
 
 3. **H3 (sub-perceptual / awareness)**: Additional exposure increases detection
@@ -54,7 +54,7 @@ on the B–A contrast. However:
 
 ### Analysis additions (not registered, exploratory)
 - Table: replay rate by arm and block
-- Sensitivity: H1/H2 excluding replayed trials (`rt_invalid == 2`)
+- Sensitivity: H1/H2 excluding replayed trials (`has_replay == 1`)
 - Covariate: `has_replay` (0/1) added to mixed model as nuisance regressor
 - Check: replay rate per arm (test for arm × replay interaction)
 
