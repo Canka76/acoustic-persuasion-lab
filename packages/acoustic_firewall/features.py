@@ -151,12 +151,15 @@ def extract(wav: np.ndarray, sr: int) -> dict[str, float]:
     f0 = librosa.yin(wav_f32, fmin=60.0, fmax=400.0, sr=sr,
                      frame_length=frame_len_f0, hop_length=hop_len_f0)
 
+    n_lf = len(wav_lf)
     lf_env = np.array([
         float(np.mean(np.abs(wav_lf[i * hop_len_f0 : i * hop_len_f0 + frame_len_f0])))
+        if i * hop_len_f0 < n_lf else float("nan")
         for i in range(len(f0))
     ], dtype=np.float64)
 
-    voiced = (f0 > 65.0) & (f0 < 380.0)
+    # Exclude frames where yin returned unvoiced range OR lf_env is nan (overrun)
+    voiced = (f0 > 65.0) & (f0 < 380.0) & ~np.isnan(lf_env)
     if voiced.sum() > 10:
         from scipy.stats import pearsonr
         corr, _ = pearsonr(f0[voiced].astype(np.float64), lf_env[voiced])
