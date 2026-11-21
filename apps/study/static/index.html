@@ -303,33 +303,33 @@ function generatePinkNoise(nSamples, sr) {
 }
 
 /** Create a stereo AudioBuffer with Huggins pitch: 180° phase inversion in
- *  a narrow band around 500 Hz on the right channel only. */
+ *  the 400–600 Hz band on the right channel only.
+ *
+ *  FIX: The 101-tap causal FIR has group delay = (bpLen-1)/2 = 50 samples.
+ *  Both channels must use the delayed direct path (noise[i-50]) so that
+ *  right = delayed_noise - 2*band is a true phase inversion at 500 Hz,
+ *  not a time-shifted subtraction that produces a lateralized level difference.
+ */
 function makeHugginsPair(sr, durationS) {
   const nSamples = Math.round(sr * durationS);
   const noise = generatePinkNoise(nSamples, sr);
 
-  // Phase-invert 500 Hz band on right channel via simple IIR all-pass trick:
-  // We use a biquad all-pass cascaded twice to approximate 180° at 500 Hz.
-  // Simple approach: copy left = noise; right = noise with sign-flipped 500 Hz band
-  // extracted via two single-pole filters (bandpass then subtract/add).
-
-  const left = new Float32Array(noise);
-
-  // Build a bandpass FIR for ~500 Hz, BW ~200 Hz (wider = more salient Huggins pitch)
+  // 101-tap Hamming-windowed bandpass FIR, 400–600 Hz
   const bpLen = 101;
+  const delay = (bpLen - 1) / 2;  // = 50 samples group delay
   const bpH = new Float32Array(bpLen);
   const fc1 = 400 / sr;
   const fc2 = 600 / sr;
   for (let k = 0; k < bpLen; k++) {
-    const n = k - (bpLen - 1) / 2;
-    const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * k / (bpLen - 1)); // Hamming
+    const n = k - delay;
+    const w = 0.54 - 0.46 * Math.cos(2 * Math.PI * k / (bpLen - 1));
     bpH[k] = (n === 0)
       ? 2 * (fc2 - fc1)
       : (Math.sin(2 * Math.PI * fc2 * n) - Math.sin(2 * Math.PI * fc1 * n)) / (Math.PI * n);
     bpH[k] *= w;
   }
 
-  // Convolve noise with bandpass filter to get 500 Hz band
+  // Causal convolution → band[i] is aligned to noise[i - delay]
   const band = new Float32Array(nSamples);
   for (let i = 0; i < nSamples; i++) {
     let s = 0;
@@ -340,10 +340,15 @@ function makeHugginsPair(sr, durationS) {
     band[i] = s;
   }
 
-  // right = noise - 2*band  (phase-inverted in that band)
+  // Delay both channels by `delay` samples so direct path aligns with filtered band
+  // left  = noise[i - delay]           (identical to right outside the BP band)
+  // right = noise[i - delay] - 2*band  (phase-inverted in 400–600 Hz band → Huggins)
+  const left  = new Float32Array(nSamples);
   const right = new Float32Array(nSamples);
   for (let i = 0; i < nSamples; i++) {
-    right[i] = noise[i] - 2 * band[i];
+    const direct = (i - delay >= 0) ? noise[i - delay] : 0;
+    left[i]  = direct;
+    right[i] = direct - 2 * band[i];
   }
 
   const buf = ctx.createBuffer(2, nSamples, sr);
