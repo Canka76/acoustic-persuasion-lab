@@ -34,6 +34,7 @@ def load_data(db_path: Path, key_path: Path | None = None) -> pd.DataFrame:
             t.position,
             r.rt_ms,
             r.rt_invalid,
+            COALESCE(r.has_replay, 0) AS has_replay,
             r.answer,
             r.confidence,
             r.allocation,
@@ -281,8 +282,14 @@ def run_secondary(df: pd.DataFrame) -> dict:
             results["trust_contrast_BA"] = planned_contrast(g.get("B", np.array([])),
                                                              g.get("A", np.array([])), "trust B-A")
 
-    # Log RT
-    fallacy = df[(df["block"] == "fallacy") & (~df["rt_invalid"].fillna(False)) & (df["rt_ms"].notna())]
+    # H5: exclude replayed trials explicitly (DEV-001 in deviations.md).
+    # rt_invalid stays binary 0/1; has_replay is a separate column.
+    fallacy = df[
+        (df["block"] == "fallacy") &
+        (~df["rt_invalid"].fillna(False)) &
+        (df["has_replay"].fillna(0) == 0) &
+        (df["rt_ms"].notna())
+    ]
     if not fallacy.empty:
         log_rt = fallacy.groupby(["participant_id", "arm"])["rt_ms"].median().reset_index()
         log_rt["log_rt"] = np.log(log_rt["rt_ms"] + 1)

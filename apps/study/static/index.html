@@ -684,9 +684,11 @@ async function runBlock(opts) {
 
         document.getElementById(submitId).onclick = async (e) => {
           const rt = e.timeStamp - audioOffsetPerfNow;
-          // rt_invalid codes: 0=valid, 1=too fast/slow, 2=replayed (excluded from H5 by design)
-          const wasReplayed = replayBtnEl && replayBtnEl.dataset.used === '1';
-          const rtInvalid = wasReplayed ? 2 : (rt < 200 || rt > 20000) ? 1 : 0;
+          // rt_invalid stays binary (0/1) as registered: too fast <200ms or too slow >20000ms.
+          // Replay is carried in has_replay (0/1) — a separate column, not an rt_invalid code,
+          // so replayed trials are not silently dropped from H1/H2 d-prime.
+          const wasReplayed = replayBtnEl && replayBtnEl.dataset.used === '1' ? 1 : 0;
+          const rtInvalid = (rt < 200 || rt > 20000) ? 1 : 0;
           document.getElementById(submitId).disabled = true;
           answerBtns.forEach(b => { b.disabled = true; b.style.outline = ''; });
 
@@ -695,6 +697,7 @@ async function runBlock(opts) {
               trial_id: trialId,
               rt_ms: rt,
               rt_invalid: rtInvalid,
+              has_replay: wasReplayed,
               answer: blockAnswer,
               confidence: confId ? blockConfidence : null,
               allocation: allocId ? blockAllocation : null,

@@ -75,6 +75,7 @@ def _init_db() -> None:
                 trial_id TEXT PRIMARY KEY,
                 rt_ms REAL,
                 rt_invalid INTEGER,
+                has_replay INTEGER DEFAULT 0,
                 answer TEXT,
                 confidence INTEGER,
                 allocation INTEGER,
@@ -88,6 +89,11 @@ def _init_db() -> None:
                 ts REAL
             );
         """)
+        # Migration: add has_replay if DB predates this column (idempotent)
+        try:
+            conn.execute("ALTER TABLE response ADD COLUMN has_replay INTEGER DEFAULT 0")
+        except Exception:
+            pass  # column already exists
 
 
 # Run at import time
@@ -120,6 +126,7 @@ class TrialResponseIn(BaseModel):
     trial_id: str
     rt_ms: Optional[float] = None
     rt_invalid: Optional[int] = None
+    has_replay: Optional[int] = 0
     answer: Optional[str] = None
     confidence: Optional[int] = None
     allocation: Optional[int] = None
@@ -183,17 +190,19 @@ async def trial_start(body: TrialStartIn) -> dict:
 async def trial_response(body: TrialResponseIn) -> dict:
     with _get_conn() as conn:
         conn.execute(
-            """INSERT INTO response (trial_id, rt_ms, rt_invalid, answer, confidence, allocation, audio_offset_ts)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO response
+               (trial_id, rt_ms, rt_invalid, has_replay, answer, confidence, allocation, audio_offset_ts)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(trial_id) DO UPDATE SET
                  rt_ms=excluded.rt_ms,
                  rt_invalid=excluded.rt_invalid,
+                 has_replay=excluded.has_replay,
                  answer=excluded.answer,
                  confidence=excluded.confidence,
                  allocation=excluded.allocation,
                  audio_offset_ts=excluded.audio_offset_ts""",
-            (body.trial_id, body.rt_ms, body.rt_invalid, body.answer,
-             body.confidence, body.allocation, body.audio_offset_ts),
+            (body.trial_id, body.rt_ms, body.rt_invalid, body.has_replay or 0,
+             body.answer, body.confidence, body.allocation, body.audio_offset_ts),
         )
     return {"ok": True}
 
@@ -233,6 +242,7 @@ async def export_csv(x_admin_token: Optional[str] = Header(default=None)):
                 t.presented_at,
                 r.rt_ms,
                 r.rt_invalid,
+                COALESCE(r.has_replay, 0) AS has_replay,
                 r.answer,
                 r.confidence,
                 r.allocation,
@@ -248,7 +258,7 @@ async def export_csv(x_admin_token: Optional[str] = Header(default=None)):
     writer.writerow([
         "participant_id", "arm_code", "age_band", "native_lang", "hearing_impaired",
         "trial_id", "item_id", "block", "position", "audio_path", "presented_at",
-        "rt_ms", "rt_invalid", "answer", "confidence", "allocation", "audio_offset_ts",
+        "rt_ms", "rt_invalid", "has_replay", "answer", "confidence", "allocation", "audio_offset_ts",
     ])
     for row in rows:
         writer.writerow(list(row))
