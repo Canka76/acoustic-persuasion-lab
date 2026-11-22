@@ -99,3 +99,48 @@ under randomization), there is no systematic directional bias on H1/H2.
 - Sensitivity: re-run H1/H2 restricting to attempt-1 passers only
   (`event.data->>attempt == 1` in the headphone_screen event log)
 
+
+---
+
+## DEV-003 — WORLD vocoder inherent amplitude jitter; unremovable by parameter tuning
+
+**Date:** 2026-11-22  
+**Type:** Instrumentation limitation; no code change made  
+**Status:** Pre-data (dry run only)
+
+### Finding
+Internal dry-run tester (1 completed arm A session, `392b1726`) reported
+"very noticeable jitter" in the stimulus audio. Systematic probe confirmed
+the WORLD analysis/synthesis round-trip introduces a **+17.7% increase in
+short-time amplitude envelope jitter** relative to the Piper TTS source
+(source: 0.0121, arm A delivered: 0.0142, 5ms RMS envelope frames).
+
+### Root cause investigation (probe `scratch_jitter_probe.py`, deleted)
+All targeted fixes were tested and falsified:
+
+| Intervention | Result |
+|---|---|
+| Harvest octave-error correction (`_clean_f0`) | F0 synthesis has only 2–5 real oct-jumps; `_clean_f0` worsened V/UV flips on some items |
+| Spectral envelope temporal smoothing (3-pt weighted) | −0.1% amplitude jitter change |
+| Aperiodicity (D4C) temporal smoothing | −0.1% |
+| Finer frame period (2 ms vs 5 ms) | 0% change, slightly worse |
+| `d4c(threshold=0)` (documented HQ mode) | +0.6% (worse) |
+| Hard-clip limiter engagement | 0 samples clipped (peak at −5.32 dBFS); limiter not a factor |
+| Existing rendered files vs fresh synthesis | corr=0.9990 (files are correct) |
+
+The +17.7% amplitude jitter is a property of WORLD's harmonic pulse-train synthesis
+model and cannot be reduced with WORLD parameter changes.
+
+### Design consequence
+The WORLD round-trip is applied **identically to all three arms** (arm A: strength=0
+passthrough; arms B/C: same analysis path, then F0 pull / placebo added). The
+vocoder quality is therefore a constant nuisance variable present in all arms
+and does **not** create directional bias in the B−A contrast (H1/H2).
+
+Participants may notice the vocoded quality and report manipulation "awareness"
+in the manipulation check even when in arm A. This is expected and noted in the
+study instructions ("audio has been processed"). It does not invalidate H1/H2.
+
+### No code change
+No code change was made as a result of this investigation. The WORLD pipeline
+remains unchanged. This entry exists for transparency per prereg §9.
